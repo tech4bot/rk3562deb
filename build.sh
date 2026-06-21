@@ -3,7 +3,7 @@ set -e
 
 export PATH="/usr/sbin:/sbin:$PATH"
 
-# RK3562 Debian 12 Builder
+# RK3562 Debian 13 Builder
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SRC_DIR="${ROOT_DIR}/src"
@@ -52,7 +52,7 @@ case "${MAKE_THREADS}" in
 esac
 [ "${MAKE_THREADS}" -lt 1 ] && MAKE_THREADS=1
 
-echo "=== RK3562 Debian 12 Builder ==="
+echo "=== RK3562 Debian 13 Builder ==="
 
 usage() {
     cat <<'EOF'
@@ -384,6 +384,27 @@ run_build_rootfs() {
     fi
 }
 
+apply_local_uboot_patches() {
+    local patch_file="${ROOT_DIR}/patches/0001-u-boot-make.sh-only-require-python2-for-legacy-generators.patch"
+
+    if [ ! -f "${patch_file}" ]; then
+        return 0
+    fi
+
+    echo "[*] Checking local U-Boot patch: $(basename "${patch_file}")"
+    if git apply --check "${patch_file}" >/dev/null 2>&1; then
+        git apply "${patch_file}"
+        echo "[+] Applied local U-Boot patch."
+    elif git apply -R --check "${patch_file}" >/dev/null 2>&1; then
+        echo "[*] Local U-Boot patch already applied."
+    else
+        echo "[-] Error: unable to apply local U-Boot patch."
+        echo "    Patch: ${patch_file}"
+        echo "    Hint: ensure u-boot/make.sh matches expected base or apply manually."
+        exit 1
+    fi
+}
+
 build_uboot() {
     echo "[*] Building U-Boot..."
     cd "${SRC_DIR}"
@@ -406,6 +427,8 @@ build_uboot() {
             sudo chown -R "$(id -u):$(id -g)" .
         fi
     fi
+
+    apply_local_uboot_patches
     
     export KCFLAGS="-Wno-error"
     ABS_CROSS_COMPILE=$(dirname $(command -v aarch64-linux-gnu-gcc))"/aarch64-linux-gnu-"

@@ -3,10 +3,16 @@ set -e
 
 export PATH="/usr/sbin:/sbin:$PATH"
 
-# RK3562 Debian 12 Bookworm Rootfs Builder
+# RK3562 Debian 13 Trixie Rootfs Builder
 
 if [ "$EUID" -ne 0 ]; then
   echo "[-] This script must be run as root."
+  exit 1
+fi
+
+if [ "$#" -gt 0 ]; then
+  echo "[-] build_rootfs.sh builds rootfs only and does not accept build targets."
+  echo "    Use ./build.sh all for a full image build, or ./build.sh image to pack an existing rootfs."
   exit 1
 fi
 
@@ -78,7 +84,7 @@ case "${RKDEBIAN_MINIMIZE_IMAGE}" in
         ;;
 esac
 
-echo "[*] Building Debian 12 Bookworm arm64 rootfs..."
+echo "[*] Building Debian 13 Trixie arm64 rootfs..."
 echo "[*] UI session: ${RKDEBIAN_UI_SESSION} | GPU stack: ${RKDEBIAN_GPU_STACK} | mali libgbm: ${RKDEBIAN_MALI_GBM_PROVIDER} | preinstall-freetube: ${RKDEBIAN_PREINSTALL_FREETUBE} | minimize: ${RKDEBIAN_MINIMIZE_IMAGE}"
 
 chroot_cleanup() {
@@ -122,7 +128,7 @@ if [ ! -f "${ROOTFS_MNT}/etc/debian_version" ]; then
     mkdir -p "${ROOTFS_MNT}"
 
     echo "[*] Running debootstrap first stage..."
-    debootstrap --arch=arm64 --foreign bookworm "${ROOTFS_MNT}" http://deb.debian.org/debian/
+    debootstrap --arch=arm64 --foreign trixie "${ROOTFS_MNT}" http://deb.debian.org/debian/
 
     echo "[*] Copying qemu-aarch64-static..."
     cp /usr/bin/qemu-aarch64-static "${ROOTFS_MNT}/usr/bin/"
@@ -131,7 +137,7 @@ if [ ! -f "${ROOTFS_MNT}/etc/debian_version" ]; then
     chmod +x "${ROOTFS_MNT}/debootstrap/debootstrap"
     chroot "${ROOTFS_MNT}" /debootstrap/debootstrap --second-stage
 else
-    echo "[*] Existing Debian 12 rootfs found. Skipping debootstrap..."
+    echo "[*] Existing Debian 13 rootfs found. Skipping debootstrap..."
     echo "[*] Tip: set RKDEBIAN_FORCE_CLEAN_ROOTFS=1 for a fully fresh rebuild."
 fi
 
@@ -161,22 +167,34 @@ cat << 'CHROOT_EOF' > "${ROOTFS_MNT}/tmp/setup_debian.sh"
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
-# Ensure firmware repositories are available on Bookworm.
+# Ensure firmware repositories are available on Trixie.
 cat > /etc/apt/sources.list << 'APT_SOURCES'
-deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
-deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
-deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
 APT_SOURCES
 
-# Avoid man-db trigger permission issues on reused/rootless-compatible trees.
+# Avoid man-db trigger permission issues on reused trees. man-db updates this
+# cache as user "man", so root:root ownership can cause permission warnings.
 mkdir -p /var/cache/man
-chown -R root:root /var/cache/man 2>/dev/null || true
-chmod -R u+rwX /var/cache/man 2>/dev/null || true
+if getent passwd man >/dev/null 2>&1; then
+    chown -R man:root /var/cache/man 2>/dev/null || true
+else
+    chown -R root:root /var/cache/man 2>/dev/null || true
+fi
+find /var/cache/man -type d -exec chmod 0755 {} + 2>/dev/null || true
+chmod g+s /var/cache/man 2>/dev/null || true
+find /var/cache/man -type f -exec chmod 0644 {} + 2>/dev/null || true
 
 # Update apt and install basic utilities
 apt-get update
+echo "[*] Recovering interrupted dpkg state (if any)..."
+dpkg --configure -a || \
+    echo "[!] Warning: dpkg configure step reported errors; continuing with apt repair."
+apt-get -f install -y || \
+    echo "[!] Warning: apt dependency repair failed; continuing with base package install."
 apt-get install -y sudo curl wget nano vim openssh-server network-manager wpasupplicant iw wireless-tools \
-    network-manager-gnome bluez blueman policykit-1-gnome \
+    network-manager-gnome bluez blueman \
     xorg xserver-xorg xserver-xorg-input-libinput firefox-esr mesa-utils libgl1-mesa-dri mesa-vulkan-drivers \
     pipewire pipewire-audio pipewire-alsa pipewire-pulse wireplumber pavucontrol alsa-utils libasound2-plugins \
     pipewire-libcamera libcamera-ipa libcamera-v4l2 \
@@ -198,11 +216,29 @@ apt-get install -y sudo curl wget nano vim openssh-server network-manager wpasup
     dolphin plasma-discover okular \
     gstreamer1.0-tools
 
-# Remove any Trixie apt source that may be left over from a previous failed
-# build attempt.  Trixie packages require libc6 >= 2.38 which Bookworm does
-# not have, so mixing the two repos breaks apt.
-rm -f "${ROOTFS_MNT}/etc/apt/sources.list.d/trixie.list"
-rm -f "${ROOTFS_MNT}/etc/apt/preferences.d/99-trixie-pin"
+# Install one policykit authentication agent. Package names differ across
+# Debian releases, so try multiple providers in order.
+polkit_agent_installed=0
+for polkit_agent_pkg in policykit-1-gnome mate-polkit lxqt-policykit polkit-kde-agent-1; do
+    pkg_ver=$(apt-cache policy "${polkit_agent_pkg}" 2>/dev/null | awk '/Candidate:/{print $2}')
+    if [ -n "${pkg_ver}" ] && [ "${pkg_ver}" != "(none)" ]; then
+        if apt-get install -y "${polkit_agent_pkg}"; then
+            echo "[*] Installed polkit auth agent package: ${polkit_agent_pkg}"
+            polkit_agent_installed=1
+            break
+        fi
+    fi
+done
+if [ "${polkit_agent_installed}" -eq 0 ]; then
+    echo "[!] Warning: no polkit auth-agent package available; GUI auth prompts may not work."
+fi
+
+# Remove stale cross-release apt source/pinning files from old builds so
+# sources.list above is authoritative.
+rm -f /etc/apt/sources.list.d/bookworm.list
+rm -f /etc/apt/preferences.d/99-bookworm-pin
+rm -f /etc/apt/sources.list.d/trixie.list
+rm -f /etc/apt/preferences.d/99-trixie-pin
 apt-get update -qq
 
 # Remove stale desktop shells from reused rootfs trees so a non-clean build
@@ -234,8 +270,8 @@ fi
 
 # Optional helpers for sandboxed apps and touch/desktop integration.
 for optional_pkg in xdg-desktop-portal-gtk xdg-desktop-portal-gnome plasma-discover-backend-flatpak; do
-    # Check exact Bookworm version to avoid accidentally pulling Trixie builds
-    # that sneak in via a dirty apt cache.
+    # Check candidate availability first to keep optional installs resilient
+    # across mirror/package changes.
     pkg_ver=$(apt-cache policy "${optional_pkg}" 2>/dev/null \
               | awk '/Candidate:/{print $2}')
     if [ -n "${pkg_ver}" ] && [ "${pkg_ver}" != "(none)" ]; then
@@ -797,8 +833,14 @@ cd /tmp
 
 # Install build dependencies for VAAPI driver
 mkdir -p /var/cache/man
-chown -R root:root /var/cache/man 2>/dev/null || true
-chmod -R u+rwX /var/cache/man 2>/dev/null || true
+if getent passwd man >/dev/null 2>&1; then
+    chown -R man:root /var/cache/man 2>/dev/null || true
+else
+    chown -R root:root /var/cache/man 2>/dev/null || true
+fi
+find /var/cache/man -type d -exec chmod 0755 {} + 2>/dev/null || true
+chmod g+s /var/cache/man 2>/dev/null || true
+find /var/cache/man -type f -exec chmod 0644 {} + 2>/dev/null || true
 
 apt-get install -y --no-install-recommends git build-essential libva-dev libdrm-dev pkg-config
 
@@ -991,6 +1033,75 @@ mkdir -p "${ROOTFS_MNT}/usr/share/backgrounds/rkdebian"
 install -m 0644 "${ROOT_DIR}/splash.png" \
     "${ROOTFS_MNT}/usr/share/backgrounds/rkdebian/splash.png"
 
+# Static framebuffer logo shown while booting. This bypasses Plymouth, which
+# currently crashes on this Trixie + RK3562 stack.
+mkdir -p "${ROOTFS_MNT}/usr/local/sbin" \
+         "${ROOTFS_MNT}/etc/systemd/system" \
+         "${ROOTFS_MNT}/etc/systemd/system/graphical.target.wants"
+cat > "${ROOTFS_MNT}/usr/local/sbin/boot-fb-logo.sh" << 'BOOT_FB_LOGO'
+#!/bin/sh
+set -eu
+
+IMG="/usr/share/plymouth/themes/rkdebian/splash.png"
+FB="/dev/fb0"
+
+[ -r "$IMG" ] || exit 0
+command -v ffmpeg >/dev/null 2>&1 || exit 0
+
+# Wait briefly for framebuffer device.
+i=0
+while [ $i -lt 40 ]; do
+    [ -w "$FB" ] && break
+    i=$((i + 1))
+    sleep 0.1
+done
+[ -w "$FB" ] || exit 0
+
+W=800
+H=1280
+if [ -r /sys/class/graphics/fb0/virtual_size ]; then
+    VS="$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null || true)"
+    case "$VS" in
+        *,*) W="${VS%%,*}"; H="${VS##*,}" ;;
+    esac
+fi
+
+# The panel is rotated by kernel cmdline; rotate logo into expected orientation.
+ROTATE_FILTER="transpose=1"
+
+# Draw a centered, padded static splash. Repeat to survive early mode changes.
+N=0
+while [ $N -lt 5 ]; do
+    ffmpeg -nostdin -hide_banner -loglevel error -y \
+        -i "$IMG" -frames:v 1 \
+        -vf "${ROTATE_FILTER},scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2" \
+        -pix_fmt bgra -f fbdev "$FB" >/dev/null 2>&1 || true
+    N=$((N + 1))
+    sleep 0.2
+done
+
+exit 0
+BOOT_FB_LOGO
+chmod +x "${ROOTFS_MNT}/usr/local/sbin/boot-fb-logo.sh"
+
+cat > "${ROOTFS_MNT}/etc/systemd/system/boot-fb-logo.service" << 'BOOT_FB_LOGO_UNIT'
+[Unit]
+Description=Draw static boot logo on framebuffer
+After=systemd-udev-settle.service
+Before=display-manager.service lightdm.service
+ConditionPathExists=/dev/fb0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/boot-fb-logo.sh
+TimeoutStartSec=15
+
+[Install]
+WantedBy=graphical.target
+BOOT_FB_LOGO_UNIT
+ln -sfn /etc/systemd/system/boot-fb-logo.service \
+    "${ROOTFS_MNT}/etc/systemd/system/graphical.target.wants/boot-fb-logo.service"
+
 # Theme descriptor
 cat > "${THEME_DIR}/rkdebian.plymouth" << 'PLYMOUTH_DESC'
 [Plymouth Theme]
@@ -1139,7 +1250,9 @@ if [ -f "${PHOSH_BIN}" ]; then
         fi
         if [ "${current_hex}" != "${expected_hex}" ]; then
             echo "[!] Warning: ${label} unexpected bytes ${current_hex} (expected ${expected_hex}); skipping patch."
-            return 1
+            # Keep build resilient across phosh package updates where opcode
+            # bytes can shift; this patch is optional and should not abort.
+            return 0
         fi
 
         payload="$(printf '%s' "${patched_hex}" | sed 's/../\\x&/g')"
@@ -1204,6 +1317,7 @@ rm -f "${ROOTFS_MNT}/usr/share/lightdm/lightdm.conf.d/40-kde-plasma-kf5.conf"
 # Phosh uses LightDM with autologin into the Wayland session.
 cat > "${ROOTFS_MNT}/etc/lightdm/lightdm.conf" << 'LIGHTDM_CONF'
 [LightDM]
+minimum-vt=1
 
 [Seat:*]
 type=local
@@ -1219,6 +1333,30 @@ LIGHTDM_CONF
 mkdir -p "${ROOTFS_MNT}/etc/X11" "${ROOTFS_MNT}/etc/systemd/system"
 printf '%s\n' '/usr/sbin/lightdm' > "${ROOTFS_MNT}/etc/X11/default-display-manager"
 ln -sfn /lib/systemd/system/lightdm.service "${ROOTFS_MNT}/etc/systemd/system/display-manager.service"
+# Avoid a tty1 text login flicker between boot logo and GUI.
+ln -sfn /dev/null "${ROOTFS_MNT}/etc/systemd/system/getty@tty1.service"
+
+# Plasma Discover can fail to launch on this Wayland + Mali stack when Qt's
+# default GL path cannot initialize EGL. Provide a software-rendered wrapper
+# and override the desktop entry to keep app store access functional.
+mkdir -p "${ROOTFS_MNT}/usr/local/bin" "${ROOTFS_MNT}/usr/local/share/applications"
+cat > "${ROOTFS_MNT}/usr/local/bin/plasma-discover-safe" << 'PLASMA_DISCOVER_SAFE'
+#!/bin/sh
+set -eu
+export QSG_RHI_BACKEND="${QSG_RHI_BACKEND:-software}"
+export QT_QUICK_BACKEND="${QT_QUICK_BACKEND:-software}"
+export QT_OPENGL="${QT_OPENGL:-software}"
+exec /usr/bin/plasma-discover "$@"
+PLASMA_DISCOVER_SAFE
+chmod +x "${ROOTFS_MNT}/usr/local/bin/plasma-discover-safe"
+if [ -f "${ROOTFS_MNT}/usr/share/applications/org.kde.discover.desktop" ]; then
+    cp -f "${ROOTFS_MNT}/usr/share/applications/org.kde.discover.desktop" \
+        "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+    sed -i 's|^Exec=plasma-discover %F$|Exec=/usr/local/bin/plasma-discover-safe %F|' \
+        "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+    sed -i 's|^Exec=plasma-discover --mode update$|Exec=/usr/local/bin/plasma-discover-safe --mode update|' \
+        "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+fi
 
 # Stale user-unit symlinks from old sway-focused rootfs trees can trigger
 # waybar restart loops and tank UI responsiveness.
@@ -1948,14 +2086,38 @@ chroot "${ROOTFS_MNT}" chown chaos:chaos "/home/chaos/.local/share/applications/
 done
 
 # Keep a fallback polkit agent autostart for Phosh sessions.
-mkdir -p "${ROOTFS_MNT}/etc/xdg/autostart"
-if [ ! -f "${ROOTFS_MNT}/etc/xdg/autostart/polkit-gnome-authentication-agent-1.desktop" ]; then
-cat > "${ROOTFS_MNT}/etc/xdg/autostart/polkit-gnome-authentication-agent-1.desktop" << 'POLKIT'
+mkdir -p "${ROOTFS_MNT}/etc/xdg/autostart" "${ROOTFS_MNT}/usr/local/bin"
+cat > "${ROOTFS_MNT}/usr/local/bin/rk-polkit-agent-launch.sh" << 'RK_POLKIT_LAUNCH'
+#!/bin/sh
+set -eu
+
+for agent in \
+    /usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1 \
+    /usr/libexec/polkit-mate-authentication-agent-1 \
+    /usr/bin/lxqt-policykit-agent \
+    /usr/lib/aarch64-linux-gnu/libexec/polkit-kde-authentication-agent-1 \
+    /usr/lib/x86_64-linux-gnu/libexec/polkit-kde-authentication-agent-1 \
+    /usr/libexec/polkit-kde-authentication-agent-1 \
+    /usr/lib/polkit-kde-authentication-agent-1
+do
+    if [ -x "${agent}" ]; then
+        exec "${agent}"
+    fi
+done
+
+exit 0
+RK_POLKIT_LAUNCH
+chmod +x "${ROOTFS_MNT}/usr/local/bin/rk-polkit-agent-launch.sh"
+
+if [ ! -f "${ROOTFS_MNT}/etc/xdg/autostart/polkit-gnome-authentication-agent-1.desktop" ] && \
+   [ ! -f "${ROOTFS_MNT}/etc/xdg/autostart/lxqt-policykit-agent.desktop" ] && \
+   [ ! -f "${ROOTFS_MNT}/etc/xdg/autostart/polkit-kde-authentication-agent-1.desktop" ]; then
+cat > "${ROOTFS_MNT}/etc/xdg/autostart/rk-polkit-agent.desktop" << 'POLKIT'
 [Desktop Entry]
 Type=Application
 Name=PolicyKit Authentication Agent
-Exec=/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1
-OnlyShowIn=Phosh;GNOME;
+Exec=/usr/local/bin/rk-polkit-agent-launch.sh
+OnlyShowIn=Phosh;GNOME;MATE;LXQt;KDE;
 X-GNOME-Autostart-enabled=true
 POLKIT
 fi
@@ -4430,6 +4592,7 @@ fi
 install -d /etc/lightdm /etc/X11 /etc/systemd/system
 cat > /etc/lightdm/lightdm.conf << 'LIGHTDM_CONF'
 [LightDM]
+minimum-vt=1
 
 [Seat:*]
 type=local
@@ -4445,6 +4608,7 @@ LIGHTDM_CONF
 rm -rf /etc/sddm.conf.d
 printf '%s\n' '/usr/sbin/lightdm' > /etc/X11/default-display-manager
 ln -sfn /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+ln -sfn /dev/null /etc/systemd/system/getty@tty1.service
 systemctl disable sddm >/dev/null 2>&1 || true
 systemctl enable lightdm >/dev/null 2>&1 || true
 rm -f "${ARMED_FILE}"

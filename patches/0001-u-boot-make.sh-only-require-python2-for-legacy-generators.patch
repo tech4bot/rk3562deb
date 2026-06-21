@@ -1,0 +1,16 @@
+diff --git a/make.sh b/make.sh
+index 8b8fe59..4b21abe 100755
+--- a/make.sh
++++ b/make.sh
+@@ -730,8 +730,9 @@ function pack_fit_image()
+ 		echo "ERROR: No 'dtc', please: apt-get install device-tree-compiler"
+ 		exit 1
+ 	elif [ "${ARM64_TRUSTZONE}" == "y" ]; then
+-		if ! which python2 >/dev/null 2>&1 ; then
+-			echo "ERROR: No python2"
++		SPL_FIT_GENERATOR=$(filt_val "CONFIG_SPL_FIT_GENERATOR" .config)
++		if [[ "${SPL_FIT_GENERATOR}" == *.py ]] && ! command -v python2 >/dev/null 2>&1 ; then
++			echo "ERROR: python2 is required by ${SPL_FIT_GENERATOR}"
+ 			exit 1
+ 		fi
+ 	fi

@@ -1,15 +1,17 @@
-# rkdebian — Debian 12 for Doogee U10 (RK3562)
+# rkdebian — Debian 13 for Doogee U10 (RK3562)
+
+![Doogee U10 tablet running debian 13](docs/Doogee_U10_debian.jpeg)
 
 ![Doogee U10 tablet running debian 12](docs/Doogee_U10_debian.jpeg)
 
 ## Download Pre-release Image
 
 > **Current public build (pre-release, May 14, 2026):**
-> - Release page: [tech4bot/rk3562deb prerelease-14052026](https://github.com/tech4bot/rk3562deb/releases/tag/prerelease-14052026)
-> - Direct image download: [rk3562-debian.img.xz](https://github.com/tech4bot/rk3562deb/releases/download/prerelease-14052026/rk3562-debian.img.xz)
+> - Release page: [tech4bot/rk3562deb prerelease-24052026](https://github.com/tech4bot/rk3562deb/releases/tag/prerelease-24052026)
+> - Direct image download: [rk3562-debian.img.xz](https://github.com/tech4bot/rk3562deb/releases/download/prerelease-24052026/rk3562-debian.img.xz)
 > - Video demo: [YouTube](https://youtu.be/DbX13_mahKc?si=Ba9u2xqAmoXM7nYb)
 
-> **Run full Debian 12 Bookworm on your Doogee U10 tablet — no bootloader unlock required.**
+> **Run full Debian 13 Trixie on your Doogee U10 tablet — no bootloader unlock required.**
 > Boot from SD card, remove it to return to stock Android. No changes to internal storage.
 
 > **Reverse engineered from scratch** — no BSP, no vendor documentation, no official support.
@@ -19,7 +21,7 @@
 
 ## Overview
 
-**rkdebian** is a build system that produces a complete, bootable Debian 12 Bookworm image for the **Doogee U10** Android tablet, powered by the **Rockchip RK3562** SoC.
+**rkdebian** is a build system that produces a complete, bootable Debian 13 Trixie image for the **Doogee U10** Android tablet, powered by the **Rockchip RK3562** SoC.
 
 The resulting image is written to an SD card. Insert it and power on — the tablet boots Debian. Remove the SD card and it boots Android from internal eMMC as normal.
 
@@ -218,7 +220,7 @@ Compatibility/raw images are also kept:
 | `./build.sh lunch` | Select a build configuration (defconfig) |
 | `./build.sh uboot` | Build U-Boot only |
 | `./build.sh extboot` | Build the Linux kernel only |
-| `./build.sh rootfs` | Build the Debian 12 rootfs only, then verify the requested build profile marker |
+| `./build.sh rootfs` | Build the Debian 13 rootfs only, then verify the requested build profile marker |
 | `./build.sh compile` | Build U-Boot + kernel (skip rootfs and image) |
 | `./build.sh image` | Assemble the final SD card image from existing artifacts (with rootfs profile verification) |
 | `./build.sh updateimg` | Legacy image assembly path (SDK-compat); packages image without running profile verification |
@@ -419,7 +421,7 @@ The SD card image uses a GPT partition table:
 | `idbloader` | 32 KiB | — | SPL / first-stage bootloader |
 | `uboot` | 8 MiB | — | U-Boot FIT image |
 | `boot` | 16 MiB | 256 MiB | FAT: kernel Image, DTB, extlinux.conf |
-| `rootfs` | 272 MiB | auto | ext4: Debian 12 Bookworm root filesystem |
+| `rootfs` | 272 MiB | auto | ext4: Debian 13 Trixie root filesystem |
 
 The rootfs partition is automatically expanded to fill the SD card on first boot.
 
@@ -462,7 +464,7 @@ rkdebian/
 | Linux kernel | 6.1.x (`develop-6.1`, rockchip-linux) |
 | U-Boot | Firefly `rk356x/firefly-5.10` |
 | rkbin | Rockchip upstream `master` |
-| Debian | 12 Bookworm (arm64) |
+| Debian | 13 Trixie (arm64) |
 
 ---
 
