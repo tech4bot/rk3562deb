@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OSK Hide Button
+Comment=Show a small hide button when the on-screen keyboard is visible
+Exec=/usr/bin/python3 /home/chaos/.local/bin/osk-hide-button.py
+Terminal=false
+X-GNOME-Autostart-enabled=true
+OnlyShowIn=Phosh;GNOME;

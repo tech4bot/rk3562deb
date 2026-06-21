@@ -2,8 +2,6 @@
 
 ![Doogee U10 tablet running debian 13](docs/Doogee_U10_debian.jpeg)
 
-![Doogee U10 tablet running debian 12](docs/Doogee_U10_debian.jpeg)
-
 ## Download Pre-release Image
 
 > **Current public build (pre-release, May 14, 2026):**

@@ -1,0 +1,7 @@
+[Plugin]
+Id=@name@
+Name=Hide Keyboard
+Types=quick-setting;
+Comment=Adds a quick-setting tile to hide the on-screen keyboard.
+Plugin=@plugins_dir@/libphosh-plugin-@name@.so
+NoDisplay=true

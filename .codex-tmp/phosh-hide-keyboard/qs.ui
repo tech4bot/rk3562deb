@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.24"/>
+  <template class="PhoshHideKeyboardQuickSetting" parent="PhoshQuickSetting">
+    <property name="status-icon">info</property>
+    <property name="status-page">status_page</property>
+    <signal name="clicked" handler="on_clicked" object="PhoshHideKeyboardQuickSetting" swapped="yes"/>
+  </template>
+  <object class="PhoshStatusIcon" id="info">
+    <property name="visible">1</property>
+    <property name="icon-size">1</property>
+  </object>
+  <object class="PhoshStatusPage" id="status_page">
+    <property name="visible">1</property>
+    <property name="title">Hide Keyboard</property>
+    <property name="content">placeholder</property>
+    <property name="footer">footer</property>
+  </object>
+  <object class="PhoshStatusPagePlaceholder" id="placeholder">
+    <property name="visible">1</property>
+    <property name="icon-name">input-keyboard-symbolic</property>
+    <property name="extra-widget">label</property>
+  </object>
+  <object class="GtkLabel" id="label">
+    <property name="visible">1</property>
+    <property name="label">Tap to hide the on-screen keyboard.</property>
+    <property name="wrap">1</property>
+    <property name="max-width-chars">26</property>
+    <property name="justify">center</property>
+  </object>
+  <object class="GtkButton" id="footer">
+    <property name="visible">1</property>
+    <property name="hexpand">1</property>
+    <signal name="clicked" handler="on_footer_clicked" object="PhoshHideKeyboardQuickSetting" swapped="yes"/>
+    <child>
+      <object class="GtkLabel">
+        <property name="visible">1</property>
+        <property name="ellipsize">end</property>
+        <property name="label">Hide now</property>
+      </object>
+    </child>
+  </object>
+</interface>

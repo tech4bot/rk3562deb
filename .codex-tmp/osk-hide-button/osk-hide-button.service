@@ -1,0 +1,20 @@
+[Unit]
+Description=Hide button for the on-screen keyboard
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sh -c 'until [ -S /run/user/1000/wayland-0 ] && [ -S /run/user/1000/bus ]; do sleep 1; done'
+ExecStart=/usr/bin/python3 /home/chaos/.local/bin/osk-hide-button.py
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+Environment=DISPLAY=:0
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_CURRENT_DESKTOP=Phosh:GNOME
+
+[Install]
+WantedBy=graphical-session.target
