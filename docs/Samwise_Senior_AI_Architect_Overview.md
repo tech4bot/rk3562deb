@@ -221,8 +221,9 @@ it in `overlay/arch/arm64/boot/dts/rockchip/`, which `build.sh:454` copies over
 the cloned kernel tree before compiling. Anyone building this tablet from a
 stock vendor kernel will hit the same black screen.
 
-**Fix.** `userpatches/kernel/rk35xx-vendor-6.1/fix-rk3562-tablet-panel-doogee-u10.patch`
-in the ArmbianBuild fork (commit `a6de456`). An earlier blob-substitution
+**Fix.** `fix-rk3562-tablet-panel-doogee-u10.patch` in the ArmbianBuild fork
+(commit `a6de456`; the patch now lives in `userpatches/kernel/rk3562-doogee-u10/`
+after the kernel retarget of section 4.8). An earlier blob-substitution
 extension (commit `1ef5c10`) is the approach that was actually booted on
 hardware and is retained in history as a fallback.
 
@@ -271,6 +272,64 @@ usable fallback console.
 **Note.** The image ships root with Armbian's default password `1234`, unlocked,
 with password authentication enabled. Change it at first login or set one at
 injection time; until then anything on the LAN can try it.
+
+**Scope change (later on 2026-07-27).** The injection now targets the first
+image built under the vendor-kernel retarget (section 4.8), not the
+hand-patched `-panelfix` image — that image's kernel has no wifi driver
+(section 4.8), so a NetworkManager keyfile injected into it is inert.
+
+### 4.8 Armbian Strategy: Full Port on the Rockchip Vendor Kernel (2026-07-27)
+
+**The wifi discovery.** With the panel fixed, a scope measurement of the
+remaining divergence showed the panel had been ~6% of the gap. The U10's radio
+is a Seekwave SWT6621S (SV6160), whose driver exists in **no upstream tree** —
+101 files maintained only in `rk3562deb/overlay/`. Armbian's kernel also lacks
+the U10's RK817 battery/charging enablement, the camera sensor drivers, and
+~1,100 lines of DTS/DTSI deltas. The tablet has no ethernet port: an image
+without this wifi driver has no network path at all.
+
+**Options evaluated** (full analysis in D012):
+
+- **A** — port the entire overlay onto Armbian's kernel fork: re-derivation of
+  the whole board port across two vendor forks.
+- **B** — Armbian userspace on the vendor kernel: found unsupported —
+  `armbian-bsp-cli` hard-depends on an Armbian kernel package at exact version;
+  no skip-build path exists.
+- **C** — drop Armbian; the working Debian-on-eMMC platform already does
+  everything.
+
+**Chosen: A refined into "B-1"** — the full port, but with the kernel base
+swapped to `rockchip-linux/kernel develop-6.1`, the exact tree `rk3562deb`
+builds and the provenance of the known-good 6.1.118 kernel. Every U10
+enablement delta is maintained against that tree, so the port stops being a
+cross-fork translation.
+
+**Implemented so far** (ArmbianBuild fork, unpushed):
+
+| Commit | Content |
+|---|---|
+| `b9e5404f8` | Seekwave wifi: driver vendored via `kernel_copy_extra_sources`, Kconfig/Makefile merged line-by-line (the overlay's versions would have deleted a dozen other boards' wifi drivers), firmware into the kernel image via `CONFIG_EXTRA_FIRMWARE`, `seekwcn_boot` DT node |
+| `a98b5408f` | Kernel retarget via board-scoped `post_family_config_branch_vendor` hook; `KERNELPATCHDIR=rk3562-doogee-u10`; panel patch regenerated (one anchor: the vendor tree spells `NO_EOT_PACKET` where armbian renamed it); rknpu-0.9.8 backport dropped — the vendor tree already ships it |
+
+**Kernel config** (D013): Armbian's `linux-rk35xx-vendor.config` stays the
+base. Measured: only 102 vendor-defconfig symbols are unknown to it, nearly all
+irrelevant to this board, while 1,307 Armbian-config symbols (the distro
+userspace set) are unknown to the vendor defconfig. Five symbols worth forcing
+(`DMABUF_HEAPS_ROCKCHIP_CMA_HEAP`, `ROCKCHIP_MPP_OSAL`, `ROCKCHIP_CLK_PVTPLL`,
+and the two Rockchip crypto engines) via a `custom_kernel_config` hook — the
+hook is proposed but not yet written.
+
+**Not yet done:** the five-symbol hook; the **first build** (nothing since
+`268a14c` is boot-tested except the blob-swap panel fix); RK817
+battery/charging port; poweroff patch; cameras; residual DTS/DTSI audit.
+
+**Method note.** Three consequential beliefs in this effort were overturned by
+cheap measurements: "Armbian is broadly incompatible" (one DT property),
+"upstream has the right panel GPIOs" (it has the reference board's), and "the
+vendor defconfig is the safer config base" (the asymmetry runs 13:1 the other
+way). The working rule recorded here: on this project, measure before
+architecting — the measurement is minutes and has reversed the conclusion
+every time it was taken.
 
 ### 4.2 Recovery of the eMMC Debian Root
 
@@ -1312,9 +1371,12 @@ Microphone:       working
 ASR hybrid model: executes but inaccurate
 ASR W8A8 model:   executes but produces all blanks
 ASR service:      disabled pending repair
-Armbian boot:     working; panel lit (2026-07-27)
+Armbian boot:     working; panel lit (2026-07-27, blob-swap image)
 Armbian panel:    fixed at DTS source; patch not yet boot-tested
 Armbian login:    blocked at first-boot prompt (section 4.7)
+Armbian kernel:   retargeted to rockchip-linux develop-6.1 (section 4.8, D012)
+Armbian wifi:     Seekwave driver ported; compile-verified, no build yet
+Armbian build:    NOT YET RUN under the retarget — the next gating step
 ```
 
 **Amendment, 2026-07-27.** The framing above — that the remaining recovery issue

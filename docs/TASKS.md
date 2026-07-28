@@ -64,8 +64,8 @@
 > branches `main` and `samwise-doogee-u10`. `platform/armbian/{source-lock,
 > profiles,patches,userpatches/*}` and `manifests/{images,packages,sdk}` remain
 > empty scaffolding. Either adopt the fork as the official location and delete
-> the scaffolding, or wire the fork in as a submodule. Undecided — worth a
-> D010 entry either way.
+> the scaffolding, or wire the fork in as a submodule. Undecided — needs its
+> own DECISIONS entry (D010–D013 are now taken by other decisions).
 
 - [x] Initialize armbian-build as a pinned clone — done as a separate fork, see above
 - [ ] Create initial source lockfiles — `platform/armbian/source-lock/` is empty
@@ -88,7 +88,7 @@
       image, with magic-byte checks that fail the build — `268a14c`
 - [x] Verify on hardware — BootROM now reads the SD; pulling the card drops the
       tablet to Android recovery
-- [ ] Record the boot-chain fix in DECISIONS.md (no D-entry yet)
+- [x] Record the boot-chain fix in DECISIONS.md — D010 (2026-07-27)
 
 ## Phase 4 — Display Bring-Up
 
@@ -108,7 +108,43 @@
 - [ ] Boot-test the DTS patch itself — the image that lit the panel carried the
       blob swap, not the patch. Next full rebuild is its first hardware test;
       `git revert a6de456` is the fallback
-- [ ] Record the panel fix in DECISIONS.md (no D-entry yet)
+- [x] Record the panel fix in DECISIONS.md — D011 (2026-07-27)
+
+## Phase 4b — Vendor-Kernel Retarget and Wifi Port (B-1, 2026-07-27)
+
+> Strategy recorded in D012. After the panel fix, measurement showed Armbian's
+> kernel was missing the U10's entire out-of-tree enablement set (wifi, battery,
+> cameras — all maintained by this repo's `overlay/` against
+> `rockchip-linux/kernel develop-6.1`). Rather than port across two vendor
+> forks, the board now builds its kernel from the vendor tree itself.
+
+- [x] Seekwave EA6621Q wifi ported — driver vendored (99 files + 2 headers +
+      5 firmware blobs) via `kernel_copy_extra_sources`; Kconfig/Makefile merged
+      line-by-line (never copied — rk3562deb's versions delete a dozen other
+      wifi drivers); config symbols from the proven defconfig;
+      `CONFIG_EXTRA_FIRMWARE` links blobs into the image (ArmbianBuild `b9e5404f8`)
+- [x] Wifi DT patch — `wifi_chip_type` "ap6255"→"sv6160" + `seekwcn_boot` node;
+      compile-verified against the known-good DTB
+- [x] Kernel retargeted to `rockchip-linux/kernel develop-6.1` via board-scoped
+      `post_family_config_branch_vendor` hook; `KERNELPATCHDIR=rk3562-doogee-u10`
+      (ArmbianBuild `a98b5408f`)
+- [x] Panel patch regenerated against the vendor tree (one anchor moved:
+      NO_EOT_PACKET vs armbian's renamed EOT_PACKET); re-verified, dsi,flags=0xc03
+- [x] rknpu-0.9.8 backport dropped — vendor tree already ships it (reverse-applies)
+- [x] All three patches verified to apply in sequence to a pristine vendor clone
+- [x] Kernel config decision — D013: Armbian's config stays the base;
+      measurement: 102 vendor-only symbols (mostly irrelevant) vs 1,307
+      armbian-only (distro-essential)
+- [ ] Apply the D013 five-symbol `custom_kernel_config` hook (proposed, not yet
+      written into the board config)
+- [ ] **First `./compile.sh` under the retarget** — the real test of everything
+      since `268a14c`; watch diffconfig warnings for renamed/dropped symbols
+- [ ] Port RK817 battery/charging — `rk817_charger.c`, `rk817_battery.c`,
+      `rk808.c` mfd delta + `rk817-boot-ocv-calibration.patch`
+- [ ] Port `rk817-dev-off-poweroff.patch`
+- [ ] Cameras (s5k5e8, s5k4h5yb + camera dtsi) — deferred until base image boots
+- [ ] Audit residual overlay DTS/DTSI deltas (evb1 dtsi 349 lines, camera dtsi
+      264 lines, linux/android dtsi small) for anything else load-bearing
 
 ## Phase 5 — First Boot and Hardware Validation
 
@@ -120,7 +156,9 @@
       silently no-op
 - [ ] Inject the first-boot bypass into the image — **blocked** on credentials in
       `~/samwise-preseed.env` (delete `.not_logged_in_yet`, pre-place root
-      `authorized_keys`, NetworkManager wifi keyfile, `console=tty1`, drop `splash`)
+      `authorized_keys`, NetworkManager wifi keyfile, `console=tty1`, drop `splash`).
+      Target is now the **first B-1 image**, not the old panelfix image — that
+      image has no wifi driver, so a wifi keyfile in it is inert
 - [ ] Reach a login on the Armbian image
 - [ ] Run `capture-matrix.sh` and record results — **all 20 matrix rows are still
       `—`**, including rows that demonstrably pass today. `tests/hardware/session-001/evidence/`
@@ -146,9 +184,16 @@
 
 - [ ] Complete the rescue card — SSH key never installed into the rescue root
       (`/dev/mmcblk0p4`); see overview doc section 7.1
-- [ ] Decide the `platform/armbian` vs separate-fork question (D010)
-- [ ] Clean up credential-bearing artifacts once Armbian is up:
-      `C:\Users\vandy\samwise-armbian-panelfix.img` and `~/samwise-preseed.env`
+- [ ] Decide the `platform/armbian` vs separate-fork question (needs a DECISIONS entry)
+- [ ] Clean up superseded/credential artifacts:
+      `C:\Users\vandy\samwise-armbian-panelfix.img` (+ `.sha256`) is now
+      **obsolete** — wrong kernel base, no wifi driver; delete once a B-1 image
+      exists. `~/samwise-preseed.env` (still placeholder-only) holds credentials
+      once filled — delete after injection
+- [ ] Push local commits to the forks: ArmbianBuild has 5 unpushed after
+      `268a14c` (`8be224e` docs, `1ef5c10` blob swap, `a6de456` DTS patch,
+      `b9e5404` wifi, `a98b540` retarget); rk3562deb has the doc commits after
+      `588f712`
 
 ## Reference
 
