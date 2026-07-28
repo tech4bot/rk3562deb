@@ -179,17 +179,98 @@ An Armbian image produced:
 
 Removing the SD caused the tablet to enter Android recovery rather than a normal Android userspace.
 
-**Assessment.** The attempted image was not sufficiently compatible with the tablet's:
+**Assessment at the time.** The image was assumed broadly incompatible with the
+tablet's boot chain, device tree, panel, PMIC configuration and partition scheme.
 
-- RK3562 boot chain;
-- device tree;
-- display panel;
-- RK817 power and audio configuration;
-- vendor partition scheme.
+**Solution at the time.** A known-working `tech4bot/rk3562deb` Doogee U10 image
+was used as the recovery boot source.
 
-**Solution.** A known-working `tech4bot/rk3562deb` Doogee U10 image was used as the recovery boot source.
+> **Superseded 2026-07-27 — see [section 4.6](#46-armbian-panel-resolution-2026-07-27).**
+> The broad-incompatibility assessment above was wrong. The boot chain, U-Boot,
+> kernel, storage and PMIC were all fine. A single defect — the DSI panel wired
+> to the wrong GPIO bank in the device tree — accounted for the entire symptom.
+> Armbian now boots on this tablet with the panel lit.
 
-**Architectural conclusion.** Generic Rockchip or ARM64 compatibility is not enough for this device. Bootloader, device tree, panel initialization, PMIC behavior, and storage layout must be treated as a single hardware-enablement bundle.
+**Architectural conclusion.** Generic Rockchip or ARM64 compatibility is not enough for this device. Bootloader, device tree, panel initialization, PMIC behavior, and storage layout must be treated as a single hardware-enablement bundle. The corollary, learned the hard way here: a black screen is one bit of information. It says nothing about which layer failed, and the instinct to read it as "broadly incompatible" cost roughly a week of treating Armbian as a dead end when it was one devicetree property away from working.
+
+### 4.6 Armbian Panel Resolution (2026-07-27)
+
+**Root cause.** The vendor DTS describes the Rockchip *reference* tablet, which
+drives the DSI panel from GPIO0. The Doogee U10 reuses the same board name,
+model string and `compatible`, but wires enable/reset to GPIO4. On real U10
+hardware the reference pins do nothing, so the panel never leaves reset and
+never powers up — a black screen behind an otherwise healthy boot.
+
+```text
+                          enable-gpios        reset-gpios
+factory Android DTB       gpio4 RK_PB6        gpio4 RK_PB5     <- real wiring
+running 6.1.118 DTB       gpio4 RK_PB6        gpio4 RK_PB5     <- real wiring
+rk3562deb overlay/ DTS    gpio4 RK_PB6        gpio4 RK_PB5     <- real wiring
+rockchip-linux develop-6.1  gpio0 RK_PB0      gpio0 RK_PC4     <- reference board
+armbian linux-rockchip      gpio0 RK_PB0      gpio0 RK_PC4     <- reference board
+```
+
+Alongside the GPIOs, the reference DTS also omits `power-supply` (the
+`vcc3v3_lcd_n` rail is commented out upstream), `rotation`, `bpc`, `bus-format`,
+`compatible-lcd` and `lcd1-id`, and selects `MIPI_DSI_MODE_EOT_PACKET` where the
+factory tree uses `MIPI_DSI_CLOCK_NON_CONTINUOUS` (`dsi,flags` 0xa03 vs 0xc03).
+`panel-init-sequence` is byte-identical in both.
+
+**Where the correct wiring lives.** Not upstream. `tech4bot/rk3562deb` maintains
+it in `overlay/arch/arm64/boot/dts/rockchip/`, which `build.sh:454` copies over
+the cloned kernel tree before compiling. Anyone building this tablet from a
+stock vendor kernel will hit the same black screen.
+
+**Fix.** `userpatches/kernel/rk35xx-vendor-6.1/fix-rk3562-tablet-panel-doogee-u10.patch`
+in the ArmbianBuild fork (commit `a6de456`). An earlier blob-substitution
+extension (commit `1ef5c10`) is the approach that was actually booted on
+hardware and is retained in history as a fallback.
+
+**Verification method, for reuse.** Compiling the *unpatched* DTS with `dtc -@`
+reproduced the shipped DTB byte for byte, which establishes the toolchain as
+faithful; the patched DTS then yielded a display subtree semantically identical
+to the known-good DTB, with the only raw differences being phandle numbers that
+each resolve to the same node. This validates a devicetree change in seconds
+rather than waiting hours for a build and a boot.
+
+**Status.** Panel confirmed working on hardware. The tablet now stops at
+Armbian's first-boot prompt — see [section 4.7](#47-armbian-first-boot-trap).
+
+### 4.7 Armbian First-Boot Trap
+
+With the panel working, the tablet reaches the Armbian splash and stops with a
+frozen spinner. This is not a hang. `/root/.not_logged_in_yet` is present, so
+`armbian-firstlogin` runs and blocks waiting for interactive input — root
+password, user creation, locale, timezone — while the kernel command line names
+`console=ttyS0,1500000n8` and nothing else. The prompt is going to a serial port
+with nothing attached, and `splash` plus `plymouth.ignore-serial-consoles` keeps
+Plymouth on the panel, whose spinner stops animating once boot blocks.
+
+**Trap within the trap.** Preseeding via `PRESET_*` variables does not help by
+itself. `armbian-firstlogin:674` exits immediately unless the login session is
+on `tty1`:
+
+```bash
+if [ -z "$PRESET_ROOT_PASSWORD" ]; then
+    read_password "Create root"
+else
+    if [ "$(who am i | awk '{print $2}')" != "tty1" ]; then
+        exit
+    fi
+```
+
+A correct-looking preseed on this command line silently does nothing.
+
+**Chosen approach.** Bypass firstlogin rather than feed it: delete
+`/root/.not_logged_in_yet`, pre-place Conrad's public key in
+`/root/.ssh/authorized_keys` (`PermitRootLogin yes` and `PubkeyAuthentication yes`
+are already set, with no drop-ins overriding), pre-seed a NetworkManager keyfile
+for wifi, and add `console=tty1` while removing `splash` so the panel becomes a
+usable fallback console.
+
+**Note.** The image ships root with Armbian's default password `1234`, unlocked,
+with password authentication enabled. Change it at first login or set one at
+injection time; until then anything on the LAN can try it.
 
 ### 4.2 Recovery of the eMMC Debian Root
 
@@ -639,9 +720,19 @@ The hybrid model reacts to the waveform but produces poor text.
 - Invalid FP model has been identified.
 - Broken transcription service is disabled.
 - Current failed systemd unit count is zero.
+- **Armbian boots on this tablet with the DSI panel lit** (2026-07-27), using an
+  image whose DTB was replaced with the known-good one.
+- Panel root cause identified, corroborated by three independent sources, and
+  fixed at DTS source rather than by blob substitution.
 
 ### Not yet fully verified
 
+- The DTS patch (`a6de456`) itself — verified by compilation and DTB comparison,
+  but the image that actually booted carried the blob swap. The next full
+  rebuild is its first hardware test; `git revert a6de456` is the fallback.
+- Armbian first boot past `armbian-firstlogin` (see section 4.7).
+- Armbian wifi association, SSH reachability, and any hardware-matrix row on the
+  Armbian image. Everything in the matrix remains unrecorded on both images.
 - Authenticated rescue login.
 - `/dev/mmcblk0p4` proven as active `/`.
 - Rescue account key ownership and permissions.
@@ -1221,7 +1312,17 @@ Microphone:       working
 ASR hybrid model: executes but inaccurate
 ASR W8A8 model:   executes but produces all blanks
 ASR service:      disabled pending repair
+Armbian boot:     working; panel lit (2026-07-27)
+Armbian panel:    fixed at DTS source; patch not yet boot-tested
+Armbian login:    blocked at first-boot prompt (section 4.7)
 ```
+
+**Amendment, 2026-07-27.** The framing above — that the remaining recovery issue
+is authentication and the remaining AI issue is model quantization — still holds,
+but it was written while Armbian was believed to be a dead end. It is not. The
+Armbian track is now the closest it has ever been to a usable native image: the
+boot chain, the panel, and the kernel all work, and what stands between the
+current state and a login is a first-boot prompt on an unattached serial port.
 
 Samwise should now be managed as a recoverable embedded AI platform with explicit validation gates, preserved artifacts, and layer-specific diagnostics.
 
