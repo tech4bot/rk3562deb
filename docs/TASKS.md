@@ -135,8 +135,8 @@
 - [x] Kernel config decision — D013: Armbian's config stays the base;
       measurement: 102 vendor-only symbols (mostly irrelevant) vs 1,307
       armbian-only (distro-essential)
-- [ ] Apply the D013 five-symbol `custom_kernel_config` hook (proposed, not yet
-      written into the board config)
+- [x] Apply the D013 five-symbol `custom_kernel_config` hook — ArmbianBuild
+      `37cb49b45`; all five symbols verified present in the vendor tree's Kconfigs
 - [ ] **First `./compile.sh` under the retarget** — the real test of everything
       since `268a14c`; watch diffconfig warnings for renamed/dropped symbols
 - [ ] Port RK817 battery/charging — `rk817_charger.c`, `rk817_battery.c`,

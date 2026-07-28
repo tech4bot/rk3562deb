@@ -194,7 +194,7 @@ Packaging lesson (toolchain ABI): the first packaging attempt (`librkllmrt_1.3.0
 ## D013: Kernel config baseline is Armbian's, with vendor symbols forced explicitly
 
 **Date:** 2026-07-27
-**Status:** Proposed — measurement complete, hook not yet applied
+**Status:** Implemented (hook committed; first build pending)
 
 **Context:** With the kernel retargeted (D012), which config drives it: Armbian's `linux-rk35xx-vendor.config` (4,759 enabled symbols, generated against armbian's fork) or this repo's proven `rockchip_linux_defconfig` (2,048 enabled after expansion against the vendor tree)? Measured symbol-set difference: 102 symbols enabled in the vendor defconfig are unknown to Armbian's config — of which nearly all are SPI-NOR/NAND flash vendors, other SoCs (RV1126B, RK3506), UFS, and build-only flags; the board-critical set (CPU_RK3562, CLK_RK3562, ROCKCHIP_RKNPU, DRM_ROCKCHIP, ROCKCHIP_DW_MIPI_DSI, Mali) is already present in Armbian's config. In the other direction, 1,307 symbols enabled in Armbian's config are unknown to the vendor defconfig — the general-purpose distro set (overlayfs, apparmor, audit, bridge/veth, containers, filesystems, USB classes).
 
