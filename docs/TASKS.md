@@ -7,6 +7,12 @@
 > evidence on disk are left unchecked even where they were probably done.
 > Phases 3–6 are new: the July work had no place in the tracker at all.
 
+> **Status check 2026-08-05.** No state change since 2026-07-27 — the B-1
+> retarget is staged but the first `./compile.sh` under it has still not run.
+> Re-verified this date: all three `rk3562-doogee-u10` patches apply cleanly
+> to the pristine vendor clone at `b4ef083dc`; both repos fully pushed.
+> Snapshot: `docs/STATUS.md`.
+
 ## Phase 0 — Project and Recovery Foundation
 
 - [x] Repository structure created
@@ -46,15 +52,12 @@
 - [x] Decision: Armbian board definition strategy — `config/boards/doogee-u10.wip`
       in the ArmbianBuild fork (`BOOTCONFIG=none`, `KERNEL_TARGET=vendor`,
       `SRC_EXTLINUX=yes`, GPT + FAT bootfs, SD boot chain via extension)
-- [ ] Write KERNEL_PROVENANCE.md — still the original stub. Much of it is now
-      known and just needs writing down:
-  - source `github.com/rockchip-linux/kernel`, branch `develop-6.1` (`build.sh:16-17`)
-  - defconfig `rockchip_linux_defconfig`, DTB `rk3562-rk817-tablet-v10.dtb`
-  - running kernel 6.1.118 `#131`, built 2026-04-12; predecessor was `#2`
-  - old and current module trees compared byte-identical
-  - **not** stock upstream: `overlay/arch/` replaces several DTS/DTSI files and
-    `overlay/kernel-patches/` carries rk817 poweroff and boot-OCV patches
-  - the exact commit SHA of the `#131` build is still unrecovered
+- [x] Write KERNEL_PROVENANCE.md — written 2026-08-05 from the reconciled
+      facts. Two open items tracked inside it: the exact commit SHA of the
+      running build is unrecovered, and the running-build identity itself is
+      contradicted (`#131` per this tracker vs `#2` per the direct uname
+      capture in `~/rk_tablet/notes/samwise-target-facts.txt`) — one
+      `uname -a` on samwise settles it
 
 ## Phase 2 — Pinned Armbian Build Skeleton
 
@@ -190,10 +193,9 @@
       **obsolete** — wrong kernel base, no wifi driver; delete once a B-1 image
       exists. `~/samwise-preseed.env` (still placeholder-only) holds credentials
       once filled — delete after injection
-- [ ] Push local commits to the forks: ArmbianBuild has 5 unpushed after
-      `268a14c` (`8be224e` docs, `1ef5c10` blob swap, `a6de456` DTS patch,
-      `b9e5404` wifi, `a98b540` retarget); rk3562deb has the doc commits after
-      `588f712`
+- [x] Push local commits to the forks — verified 2026-08-05: ArmbianBuild
+      `main` == `fork/main` at GeospatialDaryl/build (`37cb49b45`);
+      rk3562deb `main` == `origin/main` (`f9e6544`)
 
 ## Reference
 
