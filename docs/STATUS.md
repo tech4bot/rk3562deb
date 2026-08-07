@@ -14,6 +14,48 @@ disk in the nine days since. The single gating action is unchanged:
 cd ~/repos/ArmbianBuild && ./compile.sh kernel BOARD=doogee-u10 BRANCH=vendor
 ```
 
+> **B-1 KERNEL BUILT 2026-08-06 19:04.** The first successful build under the
+> vendor-kernel retarget. Kernel `6.1.141` from `rockchip-linux/kernel`
+> `develop-6.1` @ `b4ef083dc`; four debs in `output/debs/…-P97ad-C4969Hffd8-…`.
+> Verified in the artifacts, not just the log:
+> - **Radio is in the kernel.** All eight `SKW_*`/`SEEKWAVE_*` symbols `=y`,
+>   33 objects compiled under `drivers/net/wireless/ea6621q/`, 879
+>   `skw_`/`seekwave` symbols in `vmlinux`. `olddefconfig` *added* six further
+>   `SKW_*` symbols — proof Kconfig is parsing the driver, the exact inverse of
+>   the D015 failure. `CONFIG_EXTRA_FIRMWARE` carries the three blobs.
+> - **Touchscreen** `TOUCHSCREEN_GSL3673_800X1280=y` (D013 update).
+> - **Disabled as intended**: `TOUCHSCREEN_FTS`, `AK8975`, `AK09911` (D014).
+> - **Panel fix is in the built DTB** — first time from the DTS patch rather
+>   than a blob swap. In the shipped `rk3562-rk817-tablet-v10.dtb`,
+>   `enable-gpios`/`reset-gpios` resolve to `gpio@ffad0000` (= gpio4) pins 14
+>   and 13 = RK_PB6/RK_PB5, with `power-supply`, `rotation = 90`,
+>   `compatible-lcd` and `lcd1-id` all present. D011 is now artifact-verified,
+>   though still not boot-tested.
+>
+> Still open, non-blocking: `CRYPTO_DEV_ROCKCHIP_CE` and
+> `DMABUF_HEAPS_ROCKCHIP_CMA_HEAP` are still dropped by `olddefconfig`
+> (unmet dependencies — see D015 tail).
+>
+> **Next gating action is now the full image build:**
+> `./compile.sh build BOARD=doogee-u10 BRANCH=vendor RELEASE=bookworm`
+>
+> **Superseded 2026-08-06.** The headline above was written at 20:19 on
+> 2026-08-05; a first B-1 kernel build ran at 21:21 that same evening and
+> **failed after 87 seconds** — see
+> `output/logs/log-kernel-001d326e-*.log` in ArmbianBuild. The retarget
+> mechanism itself worked (KERNELSOURCE switched, `develop-6.1` fetched, all
+> three patches applied); the failure was `TOUCHSCREEN_FTS=y` from Armbian's
+> config against the vendor tree's pre-`get_fs`-removal focaltech driver.
+> Resolved by **D014** (`kernel_config_set_n TOUCHSCREEN_FTS` in a second
+> board hook). The gating action is now to *re-run* the command above and
+> work through any further failures of the same shape. Everything below is
+> otherwise still accurate as of 2026-08-06.
+>
+> Also open, unrelated to the build: the tablet was booted on 2026-08-06 from
+> the Jul 27 `-panelfix` image and stopped at the Armbian splash — the
+> expected `armbian-firstlogin` trap (overview section 4.7), not a
+> regression. Panel and boot chain both confirmed working again by that boot.
+
 ## What is done and verified
 
 - **Both repos fully pushed.** ArmbianBuild `main` == `fork/main`

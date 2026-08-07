@@ -202,4 +202,65 @@ Packaging lesson (toolchain ABI): the first packaging attempt (`librkllmrt_1.3.0
 
 **Rationale:** The asymmetry is 102-mostly-irrelevant vs 1,307-mostly-essential. Swapping to the vendor defconfig would silently strip the distro userspace support Armbian's rootfs assumes; `olddefconfig` reconciliation against the new tree is the smaller risk and Armbian warns loudly (`kernel_config_check_and_repair`) when it has to change anything.
 
+**Update, 2026-08-06 (touchscreen).** The hook now forces a sixth symbol, `TOUCHSCREEN_GSL3673_800X1280`, from Armbian's `=m` to the proven defconfig's `=y`. This was previously logged in KERNEL_PROVENANCE.md as a benign-looking ⚠️ tristate difference; it is not benign. The tablet's only touchscreen node is `ts@40` with `compatible = "GSL,GSL3673_800X1280"`, and the driver matches it through `.of_match_table` while exporting only `MODULE_DEVICE_TABLE(i2c, ...)` — there is no `MODULE_DEVICE_TABLE(of, ...)`. For a DT-instantiated i2c client, `i2c_device_uevent` (`drivers/i2c/i2c-core-base.c:162`) calls `of_device_uevent_modalias` first and returns on success, so the device advertises `MODALIAS=of:...CGSL,GSL3673_800X1280` and never falls through to the `i2c:gsl3673_800x1280` alias the module does export. Nothing in `modules.alias` matches, so as a module it would never be autoloaded and the tablet would boot with no touch at all. Built in, modalias is irrelevant — which is why the known-good system works. **Generalisation: for this board, an `=m` where the proven defconfig has `=y` is a defect until shown otherwise, not a cosmetic difference.** The remaining flagged tristate deltas (`GS_DA228E`, `GSENSOR_DEVICE`, `SENSOR_DEVICE`) are Rockchip sensor-class drivers that register through the sensor core rather than as their own i2c drivers, so they do not depend on modalias in the same way; that chain has not been traced and stays on the first-boot check list.
+
 **Consequences:** The five-symbol hook is the remaining pre-build change. Watch the first build's diffconfig warnings for symbols the new tree renames or drops.
+
+**Update, 2026-08-06:** The first build under the retarget exposed the *other* direction of this decision — symbols Armbian's config enables that the vendor tree cannot build. See D014.
+
+## D014: Armbian config symbols that fail against the vendor tree are disabled to match the known-good system
+
+**Date:** 2026-08-06
+**Status:** Implemented (hook committed; rebuild pending)
+
+**Context:** The first `./compile.sh kernel BOARD=doogee-u10 BRANCH=vendor` under the D012 retarget ran on 2026-08-05 21:21 and failed after 87 seconds. The retarget itself worked — the log shows `KERNELSOURCE` switching to `rockchip-linux/kernel`, `develop-6.1` fetched, and all three `rk3562-doogee-u10` patches applied. The failure was a compile error in `drivers/input/touchscreen/focaltech_touch/focaltech_flash.c`: `unknown type name 'mm_segment_t'`, implicit declarations of `get_fs`/`set_fs`, `KERNEL_DS` undeclared — the userspace-access API removed from the kernel before 6.1. `linux-rk35xx-vendor.config:3388` sets `CONFIG_TOUCHSCREEN_FTS=y`; the symbol is `default n` in the vendor tree's own Kconfig and absent entirely from the proven `rockchip_linux_defconfig`. Armbian's fork evidently carries a fix for this driver that `rockchip-linux/kernel develop-6.1` does not.
+
+This is the mirror image of D013. D013 measured the symbols the *vendor defconfig* has and Armbian's lacks, and forced the load-bearing ones on. It did not consider that pairing Armbian's config with a different kernel tree also makes the reverse a problem: config entries that are fine against the tree they were generated from and broken against this one.
+
+**Decision:** Disable such symbols to match the proven `rockchip_linux_defconfig`, via a second board-scoped hook, `custom_kernel_config__doogee_u10_armbian_config_conflicts`, kept separate from D013's hook because the two encode opposite rationales and this one is expected to grow. First and so far only entry: `kernel_config_set_n TOUCHSCREEN_FTS`.
+
+**Rationale:** Three options were available: patch the vendor tree's focaltech driver to the modern `kernel_read_file`/`vfs_read` API; carry Armbian's fork's version of the driver; or turn the symbol off. The third is correct here because the U10 has no Focaltech panel at all — its touchscreen is GSL3673 (`TOUCHSCREEN_GSL3673` and `TOUCHSCREEN_GSL3673_800X1280`, both enabled in the proven defconfig and both present in Armbian's config). Patching or vendoring a driver for absent hardware is work with no payoff and a maintenance tail. Turning it off converges the config toward the known-good system, which is the standing preference on this board.
+
+**Running list of disabled symbols:**
+
+| Symbol | Build failure | Why disabling is right |
+| :--- | :--- | :--- |
+| `TOUCHSCREEN_FTS` | `focaltech_flash.c`: `mm_segment_t`, `get_fs`/`set_fs`, `KERNEL_DS` undeclared | `default n` in the vendor tree, absent from the proven defconfig; the U10's panel is GSL3673, not Focaltech |
+| `AK8975`, `AK09911` | `modules_check`: module name conflict between `drivers/iio/magnetometer/ak8975.ko` and `drivers/input/sensors/compass/ak8975.ko` | The vendor tree carries the same magnetometer twice — mainline IIO and Rockchip's sensor class — and Armbian's config enables both. The proven defconfig enables neither family. `AK09911` is a deprecated alias that `select`s `AK8975` back on, so it has to go too |
+
+**Consequences:** Expect more failures of this shape as the build proceeds — Armbian's config enables ~1,307 symbols the vendor defconfig does not, and any of them may hit vendor-tree code that Armbian's fork has since fixed. Each one gets a line in this hook and a note here rather than a new decision. The rule for resolving them: if the known-good system does not enable the symbol, disable it; only patch the vendor tree when the hardware is actually present on the U10. Separately, `TOUCHSCREEN_GSL3673_800X1280` is `=m` in Armbian's config where the proven system has it `=y` — legal (both are tristate) but it means the touchscreen driver has to be autoloaded rather than built in; already flagged as a ⚠️ row in KERNEL_PROVENANCE.md and worth checking at first boot if touch does not work.
+
+## D015: Nothing survives `kernel_copy_extra_sources` unless it is git-ignored or arrives as a patch
+
+**Date:** 2026-08-06
+**Status:** Implemented (two patches + extension rework; rebuild pending)
+
+> **Note on this entry.** It was first written after the 18:35 build with the title "Edits to tracked kernel files belong in patches, never in extension hooks," diagnosing only the reverted `Kconfig`/`Makefile` edits. The 18:43 build proved that too narrow: untracked files are not reverted, they are **deleted**, and the vendored driver was being destroyed on every build. The general rule below replaces the narrower one.
+
+**Context:** The 2026-08-06 build failed on the AK8975 module conflict (D014), but the failure was not the important part of that log. `scripts/diffconfig` showed `olddefconfig` silently dropping **every** Seekwave symbol the extension had just set — `SEEKWAVE_BSP_DRIVERS`, `SKW_SDIOHAL`, `SKW_BSP_UCOM`, `SKW_BSP_BOOT`, `WLAN_VENDOR_SEEKWAVE`, `SKW_VENDOR`, `SKW_DFS_MASTER`, `SKW_BT` — along with `DMABUF_HEAPS_ROCKCHIP_CMA_HEAP` and `CRYPTO_DEV_ROCKCHIP_CE` from D013. Armbian printed its generic "forced kernel options introduced misconfigurations" warning and carried on. Had the AK8975 conflict not stopped the build, it would have produced a kernel with **no radio in it** and no error — the precise outcome the whole B-1 retarget exists to avoid.
+
+Cause: `doogee-u10-seekwave-wifi` vendored the 99-file driver into `drivers/net/wireless/ea6621q/`, copied two headers into `include/linux/platform_data/`, dropped three firmware blobs into `firmware/`, and `sed`-inserted two lines into `drivers/net/wireless/{Kconfig,Makefile}` — all from `kernel_copy_extra_sources`, which runs after checkout but **before** patching. `lib/tools/patching.py:292` then calls `prepare_clean_git_tree_for_patching()`, which does two destructive things (`lib/tools/common/patching_utils.py:792-808`):
+
+1. `repo.head.reset(index=True, working_tree=True)` to the base revision — **reverts every edit to a tracked file**.
+2. `for file in repo.untracked_files: os.remove(...)` — **deletes every untracked, non-ignored file**.
+
+The second is the severe one and was missed on the first pass. `os.remove()` cannot remove directories, so it strips the files and leaves the directory skeleton — which is exactly what the worktree showed after the 18:43 build: `drivers/net/wireless/ea6621q/` present, containing three empty subdirectories and **zero files**. The entire vendored driver had been deleted on every build since the extension was written.
+
+**The mechanism was identified from what survived.** The three firmware blobs were still in `firmware/` while everything else was gone. They survived because the kernel's own `firmware/.gitignore:16` carries `*.bin`, and the purge skips *ignored* files — the code comment says so explicitly ("remove all the untracked, but not ignored, files"). That is a working, in-tree demonstration of the escape hatch.
+
+**Decision:** Split by what patching does to each class of file, not by convenience.
+
+| What | Mechanism | Why |
+| :--- | :--- | :--- |
+| Driver tree (99 files, incl. binary blobs) | Extension copy + a `.gitignore` containing `*` written into the copied directory | Too big and too binary for a patch. The `*` pattern ignores the whole directory including the `.gitignore` itself, so nothing under it appears in `repo.untracked_files` |
+| Firmware blobs | Extension copy, no extra work | Already covered by the kernel's `firmware/.gitignore` `*.bin` |
+| Platform-data headers (2 files, 214 lines) | `add-seekwave-platform-data-headers.patch` | They land in a *tracked* directory, where no directory-level ignore rule can cover them |
+| `Kconfig` / `Makefile` (2 lines) | `add-seekwave-ea6621q-to-wireless-build.patch` | Tracked files; any pre-patch edit is reverted |
+
+**Rationale:** There is no extension seam between patching and the first `olddefconfig` — `kernel_config_initialize` (`lib/functions/compilation/kernel-config.sh:78`) runs `olddefconfig` *before* `call_extensions_kernel_config`, and `do_with_hooks` is literally `"$@"` (`extensions.sh:566-568`), so it generates no hook points. Files referenced by Kconfig must therefore be on disk before any extension code gets another turn. Being git-ignored is the only way a copied file crosses the patching boundary, and it is a documented property of the purge rather than an accident. The alternative — moving the vendoring later — has nowhere to move to.
+
+**Consequences:** The extension's original fail-loudly guards were worse than useless: they verified the merge at hook time, before the step that undid it, and so reported success on every build that shipped no radio. **A guard is only meaningful after the thing that can undo it.** The replacement checks run in `custom_kernel_config`, which is post-patching, and verify all four classes above — including a file count under `ea6621q/`, since an empty directory skeleton is the specific signature of the purge. **General rule for this board:** never trust that a `custom_kernel_config` symbol survived. The authority is the `scripts/diffconfig` block in the build log; a `-SYMBOL` line means it was silently dropped, and Armbian's warning about it is generic enough to scroll past.
+
+**Patch-authoring note.** Patches are applied with `-p1`, so they must carry `a/` and `b/` path prefixes. A patch generated with `git diff --no-index --no-prefix` loses its first path component silently — `include/linux/platform_data/skw_platform_data.h` became `linux/platform_data/skw_platform_data.h` at the kernel root, and the patch system still reported it as applied (`[2A]`). Only the post-patching guard caught it. Verify a new patch by applying it to an extracted copy of the base revision and listing the resulting paths, not by trusting the patch summary table.
+
+Still open: `DMABUF_HEAPS_ROCKCHIP_CMA_HEAP` and `CRYPTO_DEV_ROCKCHIP_CE` (D013) were dropped by the same `olddefconfig` pass but for a different reason — they are genuine vendor-tree symbols with unmet dependencies, not missing-Kconfig casualties. Diagnose separately once the build links.
