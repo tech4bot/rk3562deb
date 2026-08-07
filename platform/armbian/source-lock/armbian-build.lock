@@ -1,0 +1,4 @@
+repository: armbian/build
+commit: pending-initialization
+retrieval_date: pending
+verified_by: prepare-armbian-worktree.sh

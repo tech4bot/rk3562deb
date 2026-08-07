@@ -1,0 +1,81 @@
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="rk805 pwrkey"
+P: Phys=rk805_pwrkey/input0
+S: Sysfs=/devices/platform/ff200000.i2c/i2c-0/0-0020/rk805-pwrkey/input/input0
+U: Uniq=
+H: Handlers=kbd event0 dmcfreq 
+B: PROP=0
+B: EV=3
+B: KEY=10000000000000 0
+
+I: Bus=0018 Vendor=0000 Product=0000 Version=0000
+N: Name="gsl3673_800x1280"
+P: Phys=
+S: Sysfs=/devices/platform/ffa10000.i2c/i2c-2/2-0040/input/input1
+U: Uniq=
+H: Handlers=event1 dmcfreq 
+B: PROP=2
+B: EV=10000b
+B: KEY=0
+B: ABS=265800000000000
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="mir3da"
+P: Phys=
+S: Sysfs=/devices/virtual/input/input2
+U: Uniq=
+H: Handlers=event2 
+B: PROP=0
+B: EV=9
+B: ABS=7
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="gsensor"
+P: Phys=
+S: Sysfs=/devices/platform/ffa10000.i2c/i2c-2/2-0027/input/input3
+U: Uniq=
+H: Handlers=event3 
+B: PROP=0
+B: EV=9
+B: ABS=7
+
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="headset-keys"
+P: Phys=headset-keys/input0
+S: Sysfs=/devices/platform/rk817-sound/input/input4
+U: Uniq=
+H: Handlers=kbd event4 dmcfreq 
+B: PROP=0
+B: EV=3
+B: KEY=1000000000 0 0
+
+I: Bus=0000 Vendor=0000 Product=0000 Version=0000
+N: Name="rockchip-rk817 Headset"
+P: Phys=ALSA
+S: Sysfs=/devices/platform/rk817-sound/sound/card0/input5
+U: Uniq=
+H: Handlers=event5 
+B: PROP=0
+B: EV=21
+B: SW=14
+
+I: Bus=0019 Vendor=0000 Product=0000 Version=0000
+N: Name="bt-powerkey"
+P: Phys=
+S: Sysfs=/devices/platform/wireless-bluetooth/input/input6
+U: Uniq=
+H: Handlers=kbd event6 dmcfreq 
+B: PROP=0
+B: EV=3
+B: KEY=10000000000000 0
+
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="adc-keys"
+P: Phys=adc-keys/input0
+S: Sysfs=/devices/platform/adc-keys/input/input7
+U: Uniq=
+H: Handlers=kbd event7 dmcfreq 
+B: PROP=0
+B: EV=3
+B: KEY=c000000000000 0
+

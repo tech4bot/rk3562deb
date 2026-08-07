@@ -1,0 +1,3 @@
+TARGET               SOURCE          FSTYPE      OPTIONS
+/                    /dev/mmcblk2p25 ext4        rw,noatime
+└─/run/user/1001/doc portal          fuse.portal rw,nosuid,nodev,relatime,user_id=1001,group_id=1001

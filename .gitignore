@@ -13,10 +13,11 @@ prebuilt_rootfs/
 uart.log
 
 # Downloaded/upstream source trees (re-cloned by build scripts)
-src/
-kernel
-u-boot
-rkbin
+# (root-anchored: bare patterns also matched platform/armbian/userpatches/kernel|u-boot)
+/src/
+/kernel/
+/u-boot/
+/rkbin/
 
 # Local SDK selection cache
 .rk_lunch
@@ -52,3 +53,23 @@ darkos-updates2/
 # Stale session and handoff docs
 docs/camera-bringup-handoff-*.md
 docs/superpowers/plans/
+
+# Armbian platform build artifacts (Phase 0+)
+artifacts/
+work/
+third_party/armbian-build/
+toolchains/sysroot/
+toolchains/sdk-manifest.json
+toolchains/environment-setup-samwise-aarch64.sh
+
+# Baseline binary captures (large DTBs/images stored externally)
+baseline/current-system/device-tree/fdt.dtb
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Converted LLM models (hundreds of MB; regenerate with
+# scripts/convert-rkllm-model.sh, distribute out-of-band)
+*.rkllm

@@ -1,0 +1,9 @@
+● mir3da-monitor.service - MiraMEMS Mir3DA / DA223 accelerometer monitor
+     Loaded: loaded (/etc/systemd/system/mir3da-monitor.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-06-11 23:36:24 PDT; 6 days ago
+   Main PID: 54781 (python3)
+        CPU: 1h 23min 7.324s
+     CGroup: /system.slice/mir3da-monitor.service
+             └─54781 python3 /usr/local/bin/mir3da-monitor
+
+Notice: journal has been rotated since unit was started, output may be incomplete.

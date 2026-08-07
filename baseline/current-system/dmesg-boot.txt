@@ -1,0 +1,500 @@
+[594918.408284] usb usb1: Product: xHCI Host Controller
+[594918.408305] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594918.408325] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594918.410034] hub 1-0:1.0: USB hub found
+[594918.410179] hub 1-0:1.0: 1 port detected
+[594918.413091] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594918.413558] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594918.413573] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594918.413581] usb usb2: Product: xHCI Host Controller
+[594918.413587] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594918.413594] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594918.414258] hub 2-0:1.0: USB hub found
+[594918.414311] hub 2-0:1.0: 1 port detected
+[594923.350502] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594923.350537] usb usb2: USB disconnect, device number 1
+[594923.351615] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594923.352001] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594923.352032] usb usb1: USB disconnect, device number 1
+[594923.353483] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594926.514624] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594926.515517] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594926.515821] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594926.515902] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594926.516352] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594926.516847] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594926.517061] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594926.517517] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594926.517550] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594926.517574] usb usb1: Product: xHCI Host Controller
+[594926.517595] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594926.517615] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594926.519682] hub 1-0:1.0: USB hub found
+[594926.519785] hub 1-0:1.0: 1 port detected
+[594926.521236] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594926.521651] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594926.521691] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594926.521716] usb usb2: Product: xHCI Host Controller
+[594926.521736] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594926.521757] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594926.523869] hub 2-0:1.0: USB hub found
+[594926.523980] hub 2-0:1.0: 1 port detected
+[594931.466047] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594931.466144] usb usb2: USB disconnect, device number 1
+[594931.468580] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594931.469864] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594931.469952] usb usb1: USB disconnect, device number 1
+[594931.474898] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594934.630805] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594934.631802] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594934.632104] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594934.632185] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594934.632610] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594934.633263] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594934.633321] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594934.633780] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594934.633812] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594934.633835] usb usb1: Product: xHCI Host Controller
+[594934.633857] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594934.633877] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594934.636151] hub 1-0:1.0: USB hub found
+[594934.636261] hub 1-0:1.0: 1 port detected
+[594934.638478] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594934.638822] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594934.638849] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594934.638873] usb usb2: Product: xHCI Host Controller
+[594934.638893] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594934.638914] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594934.640253] hub 2-0:1.0: USB hub found
+[594934.640340] hub 2-0:1.0: 1 port detected
+[594939.583520] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594939.583603] usb usb2: USB disconnect, device number 1
+[594939.585736] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594939.586454] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594939.586528] usb usb1: USB disconnect, device number 1
+[594939.588672] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594942.746941] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594942.748484] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594942.748897] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594942.749003] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594942.749707] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594942.750454] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594942.750524] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594942.751122] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594942.751168] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594942.751203] usb usb1: Product: xHCI Host Controller
+[594942.751233] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594942.751263] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594942.753818] hub 1-0:1.0: USB hub found
+[594942.753957] hub 1-0:1.0: 1 port detected
+[594942.755677] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594942.756160] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594942.756203] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594942.756238] usb usb2: Product: xHCI Host Controller
+[594942.756268] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594942.756298] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594942.758424] hub 2-0:1.0: USB hub found
+[594942.758552] hub 2-0:1.0: 1 port detected
+[594947.694146] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594947.694241] usb usb2: USB disconnect, device number 1
+[594947.696161] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594947.697069] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594947.697136] usb usb1: USB disconnect, device number 1
+[594947.702520] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594950.854775] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594950.856000] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594950.856538] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594950.856685] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594950.857472] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594950.859586] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594950.859696] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594950.860234] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594950.860273] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594950.860296] usb usb1: Product: xHCI Host Controller
+[594950.860318] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594950.860339] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594950.862881] hub 1-0:1.0: USB hub found
+[594950.863046] hub 1-0:1.0: 1 port detected
+[594950.864317] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594950.864675] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594950.864705] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594950.864730] usb usb2: Product: xHCI Host Controller
+[594950.864752] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594950.864772] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594950.867087] hub 2-0:1.0: USB hub found
+[594950.867217] hub 2-0:1.0: 1 port detected
+[594955.791944] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594955.792016] usb usb2: USB disconnect, device number 1
+[594955.793190] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594955.793663] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594955.793696] usb usb1: USB disconnect, device number 1
+[594955.794896] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594958.950793] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594958.952503] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594958.952906] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594958.953010] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594958.953754] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594958.954477] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594958.954546] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594958.955145] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594958.955191] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594958.955226] usb usb1: Product: xHCI Host Controller
+[594958.955257] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594958.955287] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594958.957606] hub 1-0:1.0: USB hub found
+[594958.957750] hub 1-0:1.0: 1 port detected
+[594958.959452] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594958.959942] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594958.959984] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594958.960019] usb usb2: Product: xHCI Host Controller
+[594958.960050] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594958.960080] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594958.962320] hub 2-0:1.0: USB hub found
+[594958.962478] hub 2-0:1.0: 1 port detected
+[594963.902698] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594963.902774] usb usb2: USB disconnect, device number 1
+[594963.904566] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594963.905278] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594963.905308] usb usb1: USB disconnect, device number 1
+[594963.908055] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594967.071717] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594967.072796] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594967.073324] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594967.073590] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594967.074301] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594967.076530] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594967.076660] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594967.077364] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594967.077567] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594967.077608] usb usb1: Product: xHCI Host Controller
+[594967.077640] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594967.077672] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594967.081136] hub 1-0:1.0: USB hub found
+[594967.081337] hub 1-0:1.0: 1 port detected
+[594967.083049] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594967.083229] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594967.083240] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594967.083248] usb usb2: Product: xHCI Host Controller
+[594967.083255] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594967.083262] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594967.084244] hub 2-0:1.0: USB hub found
+[594967.084290] hub 2-0:1.0: 1 port detected
+[594972.005774] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594972.005811] usb usb2: USB disconnect, device number 1
+[594972.006898] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594972.007368] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594972.007403] usb usb1: USB disconnect, device number 1
+[594972.009309] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594975.162443] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594975.162714] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594975.162877] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594975.162918] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594975.163078] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594975.163334] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594975.163357] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594975.163522] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594975.163533] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594975.163540] usb usb1: Product: xHCI Host Controller
+[594975.163547] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594975.163553] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594975.164148] hub 1-0:1.0: USB hub found
+[594975.164188] hub 1-0:1.0: 1 port detected
+[594975.164622] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594975.164746] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594975.164755] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594975.164763] usb usb2: Product: xHCI Host Controller
+[594975.164769] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594975.164776] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594975.165286] hub 2-0:1.0: USB hub found
+[594975.165317] hub 2-0:1.0: 1 port detected
+[594980.108090] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594980.108132] usb usb2: USB disconnect, device number 1
+[594980.109165] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594980.109403] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594980.109421] usb usb1: USB disconnect, device number 1
+[594980.110515] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594983.270370] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594983.273762] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594983.273947] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594983.273995] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594983.274158] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594983.274584] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594983.274620] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594983.274837] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594983.274851] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594983.274859] usb usb1: Product: xHCI Host Controller
+[594983.274865] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594983.274871] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594983.275704] hub 1-0:1.0: USB hub found
+[594983.275759] hub 1-0:1.0: 1 port detected
+[594983.276301] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594983.276452] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594983.276464] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594983.276471] usb usb2: Product: xHCI Host Controller
+[594983.276478] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594983.276484] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594983.277187] hub 2-0:1.0: USB hub found
+[594983.277238] hub 2-0:1.0: 1 port detected
+[594988.218353] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594988.218393] usb usb2: USB disconnect, device number 1
+[594988.220459] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594988.220815] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594988.220849] usb usb1: USB disconnect, device number 1
+[594988.222200] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594991.395834] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594991.396756] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594991.397277] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594991.397423] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594991.398261] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594991.399631] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594991.399728] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594991.400429] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594991.400478] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594991.400513] usb usb1: Product: xHCI Host Controller
+[594991.400544] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594991.400574] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594991.403531] hub 1-0:1.0: USB hub found
+[594991.403717] hub 1-0:1.0: 1 port detected
+[594991.405558] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594991.406237] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594991.406284] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594991.406321] usb usb2: Product: xHCI Host Controller
+[594991.406352] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594991.406382] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594991.407808] hub 2-0:1.0: USB hub found
+[594991.407857] hub 2-0:1.0: 1 port detected
+[594996.324396] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594996.324433] usb usb2: USB disconnect, device number 1
+[594996.325373] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[594996.325687] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[594996.325719] usb usb1: USB disconnect, device number 1
+[594996.327342] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[594999.466379] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594999.467407] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[594999.467595] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[594999.467644] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[594999.467827] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[594999.468238] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[594999.468264] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[594999.468470] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[594999.468480] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594999.468488] usb usb1: Product: xHCI Host Controller
+[594999.468495] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[594999.468502] usb usb1: SerialNumber: xhci-hcd.8.auto
+[594999.469171] hub 1-0:1.0: USB hub found
+[594999.469214] hub 1-0:1.0: 1 port detected
+[594999.469674] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[594999.469902] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[594999.469915] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[594999.469923] usb usb2: Product: xHCI Host Controller
+[594999.469930] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[594999.469937] usb usb2: SerialNumber: xhci-hcd.8.auto
+[594999.470575] hub 2-0:1.0: USB hub found
+[594999.470614] hub 2-0:1.0: 1 port detected
+[595004.397067] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595004.397102] usb usb2: USB disconnect, device number 1
+[595004.399155] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595004.399538] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595004.399567] usb usb1: USB disconnect, device number 1
+[595004.400835] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595007.555378] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595007.555606] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595007.555767] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595007.555813] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595007.555974] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595007.556232] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595007.556255] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595007.556453] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595007.556463] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595007.556471] usb usb1: Product: xHCI Host Controller
+[595007.556477] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595007.556483] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595007.557098] hub 1-0:1.0: USB hub found
+[595007.557143] hub 1-0:1.0: 1 port detected
+[595007.557704] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595007.557833] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595007.557844] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595007.557852] usb usb2: Product: xHCI Host Controller
+[595007.557859] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595007.557900] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595007.558813] hub 2-0:1.0: USB hub found
+[595007.558857] hub 2-0:1.0: 1 port detected
+[595012.513814] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595012.513907] usb usb2: USB disconnect, device number 1
+[595012.516257] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595012.516961] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595012.517027] usb usb1: USB disconnect, device number 1
+[595012.522293] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595015.675224] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595015.675887] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595015.676235] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595015.676327] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595015.676768] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595015.677449] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595015.677502] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595015.678176] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595015.678216] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595015.678240] usb usb1: Product: xHCI Host Controller
+[595015.678261] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595015.678282] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595015.680958] hub 1-0:1.0: USB hub found
+[595015.681079] hub 1-0:1.0: 1 port detected
+[595015.682505] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595015.682885] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595015.682918] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595015.682943] usb usb2: Product: xHCI Host Controller
+[595015.682963] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595015.682984] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595015.684806] hub 2-0:1.0: USB hub found
+[595015.684913] hub 2-0:1.0: 1 port detected
+[595020.620167] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595020.620202] usb usb2: USB disconnect, device number 1
+[595020.621105] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595020.621317] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595020.621331] usb usb1: USB disconnect, device number 1
+[595020.622718] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595023.758714] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595023.758982] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595023.759157] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595023.759201] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595023.759372] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595023.759639] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595023.759663] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595023.759876] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595023.759888] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595023.759896] usb usb1: Product: xHCI Host Controller
+[595023.759904] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595023.759911] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595023.760539] hub 1-0:1.0: USB hub found
+[595023.760589] hub 1-0:1.0: 1 port detected
+[595023.761103] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595023.761265] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595023.761275] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595023.761284] usb usb2: Product: xHCI Host Controller
+[595023.761291] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595023.761298] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595023.761849] hub 2-0:1.0: USB hub found
+[595023.761882] hub 2-0:1.0: 1 port detected
+[595028.712008] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595028.712095] usb usb2: USB disconnect, device number 1
+[595028.714634] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595028.715320] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595028.715382] usb usb1: USB disconnect, device number 1
+[595028.718426] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595031.855103] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595031.855612] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595031.855835] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595031.855897] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595031.856107] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595031.856903] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595031.856953] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595031.857224] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595031.857237] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595031.857247] usb usb1: Product: xHCI Host Controller
+[595031.857255] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595031.857263] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595031.858466] hub 1-0:1.0: USB hub found
+[595031.858545] hub 1-0:1.0: 1 port detected
+[595031.859584] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595031.859741] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595031.859752] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595031.859761] usb usb2: Product: xHCI Host Controller
+[595031.859769] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595031.859777] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595031.860709] hub 2-0:1.0: USB hub found
+[595031.860754] hub 2-0:1.0: 1 port detected
+[595036.803821] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595036.803918] usb usb2: USB disconnect, device number 1
+[595036.805945] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595036.807245] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595036.807317] usb usb1: USB disconnect, device number 1
+[595036.811257] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595039.963972] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595039.965112] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595039.965508] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595039.965628] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595039.965966] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595039.968119] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595039.968220] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595039.968556] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595039.968578] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595039.968588] usb usb1: Product: xHCI Host Controller
+[595039.968597] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595039.968606] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595039.970698] hub 1-0:1.0: USB hub found
+[595039.971252] hub 1-0:1.0: 1 port detected
+[595039.973315] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595039.973527] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595039.973541] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595039.973552] usb usb2: Product: xHCI Host Controller
+[595039.973562] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595039.973571] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595039.975814] hub 2-0:1.0: USB hub found
+[595039.975932] hub 2-0:1.0: 1 port detected
+[595044.919224] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595044.919262] usb usb2: USB disconnect, device number 1
+[595044.921186] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595044.921535] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595044.921568] usb usb1: USB disconnect, device number 1
+[595044.923818] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595048.091015] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595048.092125] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595048.092318] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595048.092369] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595048.092554] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595048.092960] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595048.092991] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595048.093201] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595048.093212] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595048.093220] usb usb1: Product: xHCI Host Controller
+[595048.093227] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595048.093234] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595048.094212] hub 1-0:1.0: USB hub found
+[595048.094264] hub 1-0:1.0: 1 port detected
+[595048.095207] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595048.095356] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595048.095366] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595048.095374] usb usb2: Product: xHCI Host Controller
+[595048.095380] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595048.095386] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595048.096288] hub 2-0:1.0: USB hub found
+[595048.096480] hub 2-0:1.0: 1 port detected
+[595053.039509] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595053.039595] usb usb2: USB disconnect, device number 1
+[595053.041964] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595053.043063] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595053.043143] usb usb1: USB disconnect, device number 1
+[595053.047837] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595056.183030] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595056.183277] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595056.183445] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595056.183490] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595056.183650] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595056.183892] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 2
+[595056.183914] xhci-hcd xhci-hcd.8.auto: Host supports USB 3.0 SuperSpeed
+[595056.184119] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.01
+[595056.184131] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595056.184139] usb usb1: Product: xHCI Host Controller
+[595056.184147] usb usb1: Manufacturer: Linux 6.1.118 xhci-hcd
+[595056.184153] usb usb1: SerialNumber: xhci-hcd.8.auto
+[595056.184878] hub 1-0:1.0: USB hub found
+[595056.184931] hub 1-0:1.0: 1 port detected
+[595056.185419] usb usb2: We don't know the algorithms for LPM for this host, disabling LPM.
+[595056.185567] usb usb2: New USB device found, idVendor=1d6b, idProduct=0003, bcdDevice= 6.01
+[595056.185579] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[595056.185587] usb usb2: Product: xHCI Host Controller
+[595056.185594] usb usb2: Manufacturer: Linux 6.1.118 xhci-hcd
+[595056.185600] usb usb2: SerialNumber: xhci-hcd.8.auto
+[595056.186301] hub 2-0:1.0: USB hub found
+[595056.186441] hub 2-0:1.0: 1 port detected
+[595061.140068] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595061.140144] usb usb2: USB disconnect, device number 1
+[595061.141913] xhci-hcd xhci-hcd.8.auto: USB bus 2 deregistered
+[595061.143928] xhci-hcd xhci-hcd.8.auto: remove, state 4
+[595061.144023] usb usb1: USB disconnect, device number 1
+[595061.148505] xhci-hcd xhci-hcd.8.auto: USB bus 1 deregistered
+[595064.291114] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller
+[595064.292116] xhci-hcd xhci-hcd.8.auto: new USB bus registered, assigned bus number 1
+[595064.292301] xhci-hcd xhci-hcd.8.auto: hcc params 0x0220fe64 hci version 0x110 quirks 0x0000008022010010
+[595064.292352] xhci-hcd xhci-hcd.8.auto: irq 94, io mem 0xfe500000
+[595064.292540] xhci-hcd xhci-hcd.8.auto: xHCI Host Controller

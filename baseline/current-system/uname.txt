@@ -1,0 +1,1 @@
+Linux samwise 6.1.118 #2 SMP Thu Jun  4 21:24:25 PDT 2026 aarch64 GNU/Linux

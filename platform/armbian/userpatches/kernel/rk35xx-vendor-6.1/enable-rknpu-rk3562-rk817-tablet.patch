@@ -1,0 +1,32 @@
+From: GeospatialDaryl <vandyke.geospatial@gmail.com>
+Subject: arm64: dts: rockchip: rk3562-rk817-tablet-v10: Enable RKNPU
+
+The rk3562.dtsi declares the NPU and its IOMMU with status "disabled"
+and the tablet DTS never enables them, so the built image boots with
+no /sys/class/devfreq/ff300000.npu and librknnrt cannot initialize.
+
+The stock samwise vendor DTB (baseline/current-system/device-tree/fdt.dts
+in rk3562deb) runs the NPU with status "okay", rknpu-supply pointing at
+the vdd_npu PWM regulator, and the IOMMU enabled. Mirror that here,
+matching the wiring rk3562-evb.dtsi uses. vdd_npu is already defined
+(always-on pwm-regulator on pwm6) in this DTS.
+
+---
+--- a/arch/arm64/boot/dts/rockchip/rk3562-rk817-tablet-v10.dts
++++ b/arch/arm64/boot/dts/rockchip/rk3562-rk817-tablet-v10.dts
+@@ -934,6 +934,15 @@
+ 	status = "okay";
+ };
+
++&rknpu {
++	rknpu-supply = <&vdd_npu>;
++	status = "okay";
++};
++
++&rknpu_mmu {
++	status = "okay";
++};
++
+ &rkvdec {
+ 	status = "okay";
+ };

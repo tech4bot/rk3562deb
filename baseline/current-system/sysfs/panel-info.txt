@@ -1,0 +1,9 @@
+device
+dpms
+edid
+enabled
+modes
+power
+status
+subsystem
+uevent

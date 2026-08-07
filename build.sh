@@ -435,14 +435,16 @@ build_uboot() {
     ./make.sh rk3562 CROSS_COMPILE=${ABS_CROSS_COMPILE}
     
     # Store artifacts
-    local spl_loader
-    spl_loader=$(ls -1 rk3562_spl_loader_*.bin 2>/dev/null | head -n1 || true)
-    if [ -z "${spl_loader}" ]; then
-        echo "[-] Error: rk3562_spl_loader_*.bin not found in U-Boot output."
+    # idbloader must be the BootROM-parseable idblock (mkimage -T rksd, "RKNS"
+    # magic), not rk3562_spl_loader_*.bin — that is a boot_merger container for
+    # rkdeveloptool/maskrom USB only and the BootROM ignores it on SD/eMMC.
+    ./make.sh --idblock
+    if [ ! -f idblock.bin ]; then
+        echo "[-] Error: idblock.bin not produced by make.sh --idblock."
         exit 1
     fi
 
-    cp "${spl_loader}" "${OUT_DIR}/idbloader.img"
+    cp idblock.bin "${OUT_DIR}/idbloader.img"
     cp uboot.img "${OUT_DIR}/u-boot.itb"
     
     echo "[+] U-Boot build complete."

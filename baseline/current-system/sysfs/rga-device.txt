@@ -1,0 +1,1 @@
+crw-rw-rw- 1 root video 10, 122 Jun 11 22:37 /dev/rga

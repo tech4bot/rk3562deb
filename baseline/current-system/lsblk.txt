@@ -1,0 +1,35 @@
+NAME           SIZE TYPE FSTYPE MOUNTPOINT MODEL SERIAL     UUID
+mmcblk2      116.5G disk                         0x4e631340 
+├─mmcblk2p1      4M part                                    
+├─mmcblk2p2      4M part                                    
+├─mmcblk2p3      4M part                                    
+├─mmcblk2p4      4M part                                    
+├─mmcblk2p5      4M part                                    
+├─mmcblk2p6      4M part                                    
+├─mmcblk2p7     16M part                                    
+├─mmcblk2p8     16M part                                    
+├─mmcblk2p9     40M part                                    
+├─mmcblk2p10    40M part                                    
+├─mmcblk2p11     8M part                                    
+├─mmcblk2p12     8M part                                    
+├─mmcblk2p13     4M part                                    
+├─mmcblk2p14     4M part                                    
+├─mmcblk2p15     1M part                                    
+├─mmcblk2p16     1M part                                    
+├─mmcblk2p17    64M part                                    
+├─mmcblk2p18    64M part                                    
+├─mmcblk2p19   384M part                                    
+├─mmcblk2p20   384M part ext4                               e2315ec3-0c66-4cb3-80e4-f68ddd9a2246
+├─mmcblk2p21    64M part f2fs                               8d5001e0-753c-4b1e-bf02-256dcb746641
+├─mmcblk2p22   512K part                                    
+├─mmcblk2p23     1M part                                    
+├─mmcblk2p24     5G part                                    
+└─mmcblk2p25 110.4G part ext4   /                           25531831-c6ef-4a99-b1b9-9718e518c0ff
+mmcblk2boot0     4M disk                         0x4e631340 
+mmcblk2boot1     4M disk                         0x4e631340 
+mmcblk0       29.8G disk                         0x3946552e 
+├─mmcblk0p1  464.5K part                                    
+├─mmcblk0p2      4M part                                    
+├─mmcblk0p3    256M part vfat                               A9CD-C4E1
+└─mmcblk0p4   29.5G part ext4                               c0ffee11-2233-4455-6677-8899aabbccdd
+zram0          1.9G disk        [SWAP]                      

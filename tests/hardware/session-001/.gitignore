@@ -1,0 +1,12 @@
+# Evidence pulled back by run-remote.sh: timestamped dmesg/sysfs/procfs
+# dumps from the tablet. Treated as disposable/regenerable working data,
+# not a permanent record — re-running the session produces a fresh
+# directory every time and these can add up (full dmesg dumps etc).
+#
+# The permanent record of a session's results belongs in
+# docs/HARDWARE_TEST_MATRIX.md (per-row pass/fail + a reference to the
+# evidence path/date), not in committed raw captures here. If a specific
+# capture needs to be preserved long-term, copy it out explicitly (e.g.
+# into baseline/ or an attached artifact) rather than un-ignoring this.
+evidence/*
+!evidence/.gitkeep

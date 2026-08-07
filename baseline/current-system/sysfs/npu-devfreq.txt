@@ -1,0 +1,1 @@
+/sys/class/devfreq/ff300000.npu: governor=rknpu_ondemand cur_freq=1000000000

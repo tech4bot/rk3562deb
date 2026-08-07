@@ -1,0 +1,5 @@
+numpy==1.26.4
+onnx==1.16.1
+protobuf==4.25.4
+rknn-toolkit2==2.3.2
+setuptools==80.10.2

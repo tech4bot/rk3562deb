@@ -1,0 +1,33 @@
+  UNIT                          LOAD   ACTIVE SUB     DESCRIPTION
+  accounts-daemon.service       loaded active running Accounts Service
+  avahi-daemon.service          loaded active running Avahi mDNS/DNS-SD Stack
+  bluetooth.service             loaded active running Bluetooth service
+  cron.service                  loaded active running Regular background program processing daemon
+  dbus.service                  loaded active running D-Bus System Message Bus
+  getty@tty1.service            loaded active running Getty on tty1
+  iio-sensor-proxy.service      loaded active running IIO Sensor Proxy service
+  lightdm.service               loaded active running Light Display Manager
+  mir3da-monitor.service        loaded active running MiraMEMS Mir3DA / DA223 accelerometer monitor
+  NetworkManager.service        loaded active running Network Manager
+  polkit.service                loaded active running Authorization Manager
+  power-profiles-daemon.service loaded active running Power Profiles daemon
+  rk-dashboard.service          loaded active running RK3562 Debian dashboard
+  rk-power-profile-sync.service loaded active running Sync CPU governor/frequency caps with Power Profiles mode
+  rstudio-server.service        loaded active running RStudio Server
+  rtkit-daemon.service          loaded active running RealtimeKit Scheduling Policy Service
+  serial-getty@ttyS0.service    loaded active running Serial Getty on ttyS0
+  ssh.service                   loaded active running OpenBSD Secure Shell server
+  systemd-journald.service      loaded active running Journal Service
+  systemd-logind.service        loaded active running User Login Management
+  systemd-timesyncd.service     loaded active running Network Time Synchronization
+  systemd-udevd.service         loaded active running Rule-based Manager for Device Events and Files
+  udisks2.service               loaded active running Disk Manager
+  upower.service                loaded active running Daemon for power management
+  usb-role-manager.service      loaded active running Auto USB role manager (host/charger)
+  user@1001.service             loaded active running User Manager for UID 1001
+  wpa_supplicant.service        loaded active running WPA supplicant
+
+LOAD   = Reflects whether the unit definition was properly loaded.
+ACTIVE = The high-level unit activation state, i.e. generalization of SUB.
+SUB    = The low-level unit activation state, values depend on unit type.
+27 loaded units listed.

@@ -1,0 +1,12 @@
+total 0
+drwxr-xr-x  3 root root     220 Jun 11 22:37 .
+drwxr-xr-x 13 root root    4860 Jun 18 20:12 ..
+drwxr-xr-x  2 root root     140 Jun 11 22:37 by-path
+crw-rw----  1 root input 13, 64 Jun 11 22:37 event0
+crw-rw----  1 root input 13, 65 Jun 11 22:37 event1
+crw-rw----  1 root input 13, 66 Jun 11 22:37 event2
+crw-rw----  1 root input 13, 67 Jun 11 22:37 event3
+crw-rw----  1 root input 13, 68 Jun 11 22:37 event4
+crw-rw----  1 root input 13, 69 Jun 11 22:37 event5
+crw-rw----  1 root input 13, 70 Jun 11 22:37 event6
+crw-rw----  1 root input 13, 71 Jun 11 22:37 event7

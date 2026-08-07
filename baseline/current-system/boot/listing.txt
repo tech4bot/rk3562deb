@@ -1,0 +1,3 @@
+total 8
+drwxr-xr-x  2 root root 4096 May  8 09:15 .
+drwxr-xr-x 20 root root 4096 Jun  9 21:10 ..

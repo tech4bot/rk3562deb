@@ -1,0 +1,453 @@
+From 736d89f344156b75393b01ab2c0e3a06c39e110f Mon Sep 17 00:00:00 2001
+From: Shuangjie Lin <shuangjie.lin@rock-chips.com>
+Date: Wed, 28 Aug 2024 16:40:46 +0800
+Subject: [PATCH] driver: rknpu: Update rknpu driver, version: 0.9.8
+
+* Fix muti-process run error
+* Fix mult-process domain switch error
+
+Signed-off-by: Shuangjie Lin <shuangjie.lin@rock-chips.com>
+Change-Id: I3052eca6ef577dc6420dd4c80a3ac7d0f17211ba
+---
+ drivers/rknpu/include/rknpu_drv.h   |  5 +-
+ drivers/rknpu/include/rknpu_iommu.h |  3 +
+ drivers/rknpu/rknpu_drv.c           |  8 ++-
+ drivers/rknpu/rknpu_gem.c           | 57 +++++++++++++++++--
+ drivers/rknpu/rknpu_iommu.c         | 85 +++++++++++++++++++++++++----
+ drivers/rknpu/rknpu_job.c           | 19 +++++--
+ 6 files changed, 151 insertions(+), 26 deletions(-)
+
+diff --git a/drivers/rknpu/include/rknpu_drv.h b/drivers/rknpu/include/rknpu_drv.h
+index 136be076b2d3b..90e66d68b727d 100644
+--- a/drivers/rknpu/include/rknpu_drv.h
++++ b/drivers/rknpu/include/rknpu_drv.h
+@@ -29,10 +29,10 @@
+ 
+ #define DRIVER_NAME "rknpu"
+ #define DRIVER_DESC "RKNPU driver"
+-#define DRIVER_DATE "20240424"
++#define DRIVER_DATE "20240828"
+ #define DRIVER_MAJOR 0
+ #define DRIVER_MINOR 9
+-#define DRIVER_PATCHLEVEL 7
++#define DRIVER_PATCHLEVEL 8
+ 
+ #define LOG_TAG "RKNPU"
+ 
+@@ -174,6 +174,7 @@ struct rknpu_device {
+ 	int iommu_domain_id;
+ 	struct iommu_domain *iommu_domains[RKNPU_MAX_IOMMU_DOMAIN_NUM];
+ 	struct sg_table *cache_sgt[RKNPU_CACHE_SG_TABLE_NUM];
++	atomic_t iommu_domain_refcount;
+ };
+ 
+ struct rknpu_session {
+diff --git a/drivers/rknpu/include/rknpu_iommu.h b/drivers/rknpu/include/rknpu_iommu.h
+index 75b77c63978ed..40ea58e282d88 100644
+--- a/drivers/rknpu/include/rknpu_iommu.h
++++ b/drivers/rknpu/include/rknpu_iommu.h
+@@ -49,6 +49,9 @@ void rknpu_iommu_dma_unmap_sg(struct device *dev, struct scatterlist *sg,
+ int rknpu_iommu_init_domain(struct rknpu_device *rknpu_dev);
+ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id);
+ void rknpu_iommu_free_domains(struct rknpu_device *rknpu_dev);
++int rknpu_iommu_domain_get_and_switch(struct rknpu_device *rknpu_dev,
++				      int domain_id);
++int rknpu_iommu_domain_put(struct rknpu_device *rknpu_dev);
+ 
+ #if KERNEL_VERSION(5, 10, 0) < LINUX_VERSION_CODE
+ int iommu_get_dma_cookie(struct iommu_domain *domain);
+diff --git a/drivers/rknpu/rknpu_drv.c b/drivers/rknpu/rknpu_drv.c
+index 58c6798bcb637..e8afa9778c14c 100644
+--- a/drivers/rknpu/rknpu_drv.c
++++ b/drivers/rknpu/rknpu_drv.c
+@@ -485,8 +485,11 @@ static int rknpu_action(struct rknpu_device *rknpu_dev,
+ 		ret = 0;
+ 		break;
+ 	case RKNPU_SET_IOMMU_DOMAIN_ID: {
+-		ret = rknpu_iommu_switch_domain(rknpu_dev,
+-						*(int32_t *)&args->value);
++		ret = rknpu_iommu_domain_get_and_switch(
++			rknpu_dev, *(int32_t *)&args->value);
++		if (ret)
++			break;
++		rknpu_iommu_domain_put(rknpu_dev);
+ 		break;
+ 	}
+ 	default:
+@@ -1497,6 +1500,7 @@ static int rknpu_probe(struct platform_device *pdev)
+ 	rknpu_power_off(rknpu_dev);
+ 	atomic_set(&rknpu_dev->power_refcount, 0);
+ 	atomic_set(&rknpu_dev->cmdline_power_refcount, 0);
++	atomic_set(&rknpu_dev->iommu_domain_refcount, 0);
+ 
+ 	rknpu_debugger_init(rknpu_dev);
+ 	rknpu_init_timer(rknpu_dev);
+diff --git a/drivers/rknpu/rknpu_gem.c b/drivers/rknpu/rknpu_gem.c
+index 319d86b8cc95c..a5c5354ed85ce 100644
+--- a/drivers/rknpu/rknpu_gem.c
++++ b/drivers/rknpu/rknpu_gem.c
+@@ -10,6 +10,7 @@
+ #include <drm/drm_file.h>
+ #include <drm/drm_drv.h>
+ 
++#include <linux/delay.h>
+ #include <linux/shmem_fs.h>
+ #include <linux/dma-buf.h>
+ #include <linux/iommu.h>
+@@ -695,8 +696,13 @@ rknpu_gem_object_create(struct drm_device *drm, unsigned int flags,
+ 	if (IS_ERR(rknpu_obj))
+ 		return rknpu_obj;
+ 
+-	if (!rknpu_iommu_switch_domain(rknpu_dev, iommu_domain_id))
+-		rknpu_obj->iommu_domain_id = iommu_domain_id;
++	if (rknpu_iommu_domain_get_and_switch(rknpu_dev, iommu_domain_id)) {
++		LOG_DEV_ERROR(rknpu_dev->dev, "%s error\n", __func__);
++		rknpu_gem_release(rknpu_obj);
++		return ERR_PTR(-EINVAL);
++	}
++
++	rknpu_obj->iommu_domain_id = iommu_domain_id;
+ 
+ 	if (!rknpu_dev->iommu_en && (flags & RKNPU_MEM_NON_CONTIGUOUS)) {
+ 		/*
+@@ -788,6 +794,8 @@ rknpu_gem_object_create(struct drm_device *drm, unsigned int flags,
+ 			goto gem_release;
+ 	}
+ 
++	rknpu_iommu_domain_put(rknpu_dev);
++
+ 	LOG_DEBUG(
+ 		"created dma addr: %pad, cookie: %p, ddr size: %lu, sram size: %lu, nbuf size: %lu, attrs: %#lx, flags: %#x, iommu domain id: %d\n",
+ 		&rknpu_obj->dma_addr, rknpu_obj->cookie, rknpu_obj->size,
+@@ -805,6 +813,8 @@ rknpu_gem_object_create(struct drm_device *drm, unsigned int flags,
+ gem_release:
+ 	rknpu_gem_release(rknpu_obj);
+ 
++	rknpu_iommu_domain_put(rknpu_dev);
++
+ 	return ERR_PTR(ret);
+ }
+ 
+@@ -812,13 +822,26 @@ void rknpu_gem_object_destroy(struct rknpu_gem_object *rknpu_obj)
+ {
+ 	struct drm_gem_object *obj = &rknpu_obj->base;
+ 	struct rknpu_device *rknpu_dev = obj->dev->dev_private;
++	int wait_count = 0;
++	int ret = -EINVAL;
+ 
+ 	LOG_DEBUG(
+ 		"destroy dma addr: %pad, cookie: %p, size: %lu, attrs: %#lx, flags: %#x, handle count: %d\n",
+ 		&rknpu_obj->dma_addr, rknpu_obj->cookie, rknpu_obj->size,
+ 		rknpu_obj->dma_attrs, rknpu_obj->flags, obj->handle_count);
+ 
+-	rknpu_iommu_switch_domain(rknpu_dev, rknpu_obj->iommu_domain_id);
++	do {
++		ret = rknpu_iommu_domain_get_and_switch(
++			rknpu_dev, rknpu_obj->iommu_domain_id);
++
++		if (ret && ++wait_count >= 3) {
++			LOG_DEV_ERROR(
++				rknpu_dev->dev,
++				"failed to destroy dma addr: %pad, size: %lu\n",
++				&rknpu_obj->dma_addr, rknpu_obj->size);
++			return;
++		}
++	} while (ret);
+ 
+ 	/*
+ 	 * do not release memory region from exporter.
+@@ -847,6 +870,7 @@ void rknpu_gem_object_destroy(struct rknpu_gem_object *rknpu_obj)
+ 	}
+ 
+ 	rknpu_gem_release(rknpu_obj);
++	rknpu_iommu_domain_put(rknpu_dev);
+ }
+ 
+ int rknpu_gem_create_ioctl(struct drm_device *drm, void *data,
+@@ -903,16 +927,29 @@ int rknpu_gem_destroy_ioctl(struct drm_device *drm, void *data,
+ 	struct rknpu_device *rknpu_dev = drm->dev_private;
+ 	struct rknpu_gem_object *rknpu_obj = NULL;
+ 	struct rknpu_mem_destroy *args = data;
++	int ret = 0;
++	int wait_count = 0;
+ 
+ 	rknpu_obj = rknpu_gem_object_find(file_priv, args->handle);
+ 	if (!rknpu_obj)
+ 		return -EINVAL;
+ 
+-	rknpu_iommu_switch_domain(rknpu_dev, rknpu_obj->iommu_domain_id);
++	do {
++		ret = rknpu_iommu_domain_get_and_switch(
++			rknpu_dev, rknpu_obj->iommu_domain_id);
+ 
+-	// rknpu_gem_object_put(&rknpu_obj->base);
++		if (ret && ++wait_count >= 3) {
++			LOG_DEV_ERROR(rknpu_dev->dev,
++				      "failed to destroy memory\n");
++			return ret;
++		}
++	} while (ret);
++
++	ret = rknpu_gem_handle_destroy(file_priv, args->handle);
+ 
+-	return rknpu_gem_handle_destroy(file_priv, args->handle);
++	rknpu_iommu_domain_put(rknpu_dev);
++
++	return ret;
+ }
+ 
+ #if RKNPU_GEM_ALLOC_FROM_PAGES
+@@ -1647,6 +1684,12 @@ int rknpu_gem_sync_ioctl(struct drm_device *dev, void *data,
+ 	if (!(rknpu_obj->flags & RKNPU_MEM_CACHEABLE))
+ 		return -EINVAL;
+ 
++	if (rknpu_iommu_domain_get_and_switch(rknpu_dev,
++					      rknpu_obj->iommu_domain_id)) {
++		LOG_DEV_ERROR(rknpu_dev->dev, "%s error\n", __func__);
++		return -EINVAL;
++	}
++
+ 	if (!(rknpu_obj->flags & RKNPU_MEM_NON_CONTIGUOUS)) {
+ 		if (args->flags & RKNPU_MEM_SYNC_TO_DEVICE) {
+ 			dma_sync_single_range_for_device(
+@@ -1708,5 +1751,7 @@ int rknpu_gem_sync_ioctl(struct drm_device *dev, void *data,
+ 		}
+ 	}
+ 
++	rknpu_iommu_domain_put(rknpu_dev);
++
+ 	return 0;
+ }
+diff --git a/drivers/rknpu/rknpu_iommu.c b/drivers/rknpu/rknpu_iommu.c
+index 4797f0fec5983..efa97f39c8cc2 100644
+--- a/drivers/rknpu/rknpu_iommu.c
++++ b/drivers/rknpu/rknpu_iommu.c
+@@ -5,9 +5,13 @@
+  */
+ 
+ #include <linux/dma-map-ops.h>
++#include <linux/delay.h>
++#include <linux/jiffies.h>
+ 
+ #include "rknpu_iommu.h"
+ 
++#define RKNPU_SWITCH_DOMAIN_WAIT_TIME_MS 6000
++
+ dma_addr_t rknpu_iommu_dma_alloc_iova(struct iommu_domain *domain, size_t size,
+ 				      u64 dma_limit, struct device *dev,
+ 				      bool size_aligned)
+@@ -434,11 +438,8 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 	if (!bus)
+ 		return -EFAULT;
+ 
+-	mutex_lock(&rknpu_dev->domain_lock);
+-
+ 	src_domain_id = rknpu_dev->iommu_domain_id;
+ 	if (domain_id == src_domain_id) {
+-		mutex_unlock(&rknpu_dev->domain_lock);
+ 		return 0;
+ 	}
+ 
+@@ -447,7 +448,6 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 		LOG_DEV_ERROR(
+ 			rknpu_dev->dev,
+ 			"mismatch domain get from iommu_get_domain_for_dev\n");
+-		mutex_unlock(&rknpu_dev->domain_lock);
+ 		return -EINVAL;
+ 	}
+ 
+@@ -466,7 +466,6 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 					"failed to reattach src iommu domain, id: %d\n",
+ 					src_domain_id);
+ 			}
+-			mutex_unlock(&rknpu_dev->domain_lock);
+ 			return ret;
+ 		}
+ 		rknpu_dev->iommu_domain_id = domain_id;
+@@ -477,7 +476,6 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 		if (!dst_domain) {
+ 			LOG_DEV_ERROR(rknpu_dev->dev,
+ 				      "failed to allocate iommu domain\n");
+-			mutex_unlock(&rknpu_dev->domain_lock);
+ 			return -EIO;
+ 		}
+ 		// init domain iova_cookie
+@@ -491,7 +489,6 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 				"failed to attach iommu domain, id: %d, ret: %d\n",
+ 				domain_id, ret);
+ 			iommu_domain_free(dst_domain);
+-			mutex_unlock(&rknpu_dev->domain_lock);
+ 			return ret;
+ 		}
+ 
+@@ -508,19 +505,74 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 	// reset default iommu domain
+ 	rknpu_dev->iommu_group->default_domain = dst_domain;
+ 
+-	mutex_unlock(&rknpu_dev->domain_lock);
+-
+ 	LOG_INFO("switch iommu domain from %d to %d\n", src_domain_id,
+ 		 domain_id);
+ 
+ 	return ret;
+ }
+ 
++int rknpu_iommu_domain_get_and_switch(struct rknpu_device *rknpu_dev,
++				      int domain_id)
++{
++	unsigned long timeout_jiffies =
++		msecs_to_jiffies(RKNPU_SWITCH_DOMAIN_WAIT_TIME_MS);
++	unsigned long start = jiffies;
++	int ret = -EINVAL;
++
++	while (true) {
++		mutex_lock(&rknpu_dev->domain_lock);
++
++		if (domain_id == rknpu_dev->iommu_domain_id) {
++			atomic_inc(&rknpu_dev->iommu_domain_refcount);
++			mutex_unlock(&rknpu_dev->domain_lock);
++			break;
++		}
++
++		if (atomic_read(&rknpu_dev->iommu_domain_refcount) == 0) {
++			ret = rknpu_iommu_switch_domain(rknpu_dev, domain_id);
++			if (ret) {
++				LOG_DEV_ERROR(
++					rknpu_dev->dev,
++					"failed to switch iommu domain, id: %d, ret: %d\n",
++					domain_id, ret);
++				mutex_unlock(&rknpu_dev->domain_lock);
++				return ret;
++			}
++			atomic_inc(&rknpu_dev->iommu_domain_refcount);
++			mutex_unlock(&rknpu_dev->domain_lock);
++			break;
++		}
++
++		mutex_unlock(&rknpu_dev->domain_lock);
++
++		usleep_range(10, 100);
++		if (time_after(jiffies, start + timeout_jiffies)) {
++			LOG_DEV_ERROR(
++				rknpu_dev->dev,
++				"switch iommu domain time out, failed to switch iommu domain, id: %d\n",
++				domain_id);
++			return -EINVAL;
++		}
++	}
++
++	return 0;
++}
++
++int rknpu_iommu_domain_put(struct rknpu_device *rknpu_dev)
++{
++	atomic_dec(&rknpu_dev->iommu_domain_refcount);
++
++	return 0;
++}
++
+ void rknpu_iommu_free_domains(struct rknpu_device *rknpu_dev)
+ {
+ 	int i = 0;
+ 
+-	rknpu_iommu_switch_domain(rknpu_dev, 0);
++	if (rknpu_iommu_domain_get_and_switch(rknpu_dev, 0)) {
++		LOG_DEV_ERROR(rknpu_dev->dev, "%s error\n", __func__);
++		return;
++	}
+ 
+ 	for (i = 1; i < RKNPU_MAX_IOMMU_DOMAIN_NUM; i++) {
+ 		struct iommu_domain *domain = rknpu_dev->iommu_domains[i];
+@@ -533,6 +585,8 @@ void rknpu_iommu_free_domains(struct rknpu_device *rknpu_dev)
+ 
+ 		rknpu_dev->iommu_domains[i] = NULL;
+ 	}
++
++	rknpu_iommu_domain_put(rknpu_dev);
+ }
+ 
+ #else
+@@ -547,6 +601,17 @@ int rknpu_iommu_switch_domain(struct rknpu_device *rknpu_dev, int domain_id)
+ 	return 0;
+ }
+ 
++int rknpu_iommu_domain_get_and_switch(struct rknpu_device *rknpu_dev,
++				      int domain_id)
++{
++	return 0;
++}
++
++int rknpu_iommu_domain_put(struct rknpu_device *rknpu_dev)
++{
++	return 0;
++}
++
+ void rknpu_iommu_free_domains(struct rknpu_device *rknpu_dev)
+ {
+ }
+diff --git a/drivers/rknpu/rknpu_job.c b/drivers/rknpu/rknpu_job.c
+index 312d9c73df75a..23ed8e5cf8419 100644
+--- a/drivers/rknpu/rknpu_job.c
++++ b/drivers/rknpu/rknpu_job.c
+@@ -210,8 +210,9 @@ static inline int rknpu_job_wait(struct rknpu_job *job)
+ 					(elapse_time_us < args->timeout * 1000);
+ 			spin_unlock_irqrestore(&rknpu_dev->irq_lock, flags);
+ 			LOG_ERROR(
+-				"job: %p, iommu domain id: %d, wait_count: %d, continue wait: %d, commit elapse time: %lldus, wait time: %lldus, timeout: %uus\n",
+-				job, job->iommu_domain_id, wait_count,
++				"job: %p, mask: %#x, job iommu domain id: %d, dev iommu domain id: %d, wait_count: %d, continue wait: %d, commit elapse time: %lldus, wait time: %lldus, timeout: %uus\n",
++				job, args->core_mask, job->iommu_domain_id,
++				rknpu_dev->iommu_domain_id, wait_count,
+ 				continue_wait,
+ 				(job->hw_commit_time == 0 ? 0 : elapse_time_us),
+ 				ktime_us_delta(ktime_get(), job->timestamp),
+@@ -452,9 +453,8 @@ static void rknpu_job_next(struct rknpu_device *rknpu_dev, int core_index)
+ 	job->hw_recoder_time = job->hw_commit_time;
+ 	spin_unlock_irqrestore(&rknpu_dev->irq_lock, flags);
+ 
+-	if (atomic_dec_and_test(&job->run_count)) {
++	if (atomic_dec_and_test(&job->run_count))
+ 		rknpu_job_commit(job);
+-	}
+ }
+ 
+ static void rknpu_job_done(struct rknpu_job *job, int ret, int core_index)
+@@ -485,6 +485,8 @@ static void rknpu_job_done(struct rknpu_job *job, int ret, int core_index)
+ 	if (atomic_dec_and_test(&job->interrupt_count)) {
+ 		int use_core_num = job->use_core_num;
+ 
++		rknpu_iommu_domain_put(rknpu_dev);
++
+ 		job->flags |= RKNPU_JOB_DONE;
+ 		job->ret = ret;
+ 
+@@ -535,6 +537,11 @@ static void rknpu_job_schedule(struct rknpu_job *job)
+ 		atomic_set(&job->interrupt_count, job->use_core_num);
+ 	}
+ 
++	if (rknpu_iommu_domain_get_and_switch(rknpu_dev, job->iommu_domain_id)) {
++		job->ret = -EINVAL;
++		return;
++	}
++
+ 	spin_lock_irqsave(&rknpu_dev->irq_lock, flags);
+ 	for (i = 0; i < rknpu_dev->config->num_irqs; i++) {
+ 		if (job->args->core_mask & rknpu_core_mask(i)) {
+@@ -558,6 +565,8 @@ static void rknpu_job_abort(struct rknpu_job *job)
+ 	unsigned long flags;
+ 	int i = 0;
+ 
++	rknpu_iommu_domain_put(rknpu_dev);
++
+ 	msleep(100);
+ 
+ 	spin_lock_irqsave(&rknpu_dev->irq_lock, flags);
+@@ -843,8 +852,6 @@ int rknpu_submit_ioctl(struct drm_device *dev, void *data,
+ 	struct rknpu_device *rknpu_dev = dev_get_drvdata(dev->dev);
+ 	struct rknpu_submit *args = data;
+ 
+-	rknpu_iommu_switch_domain(rknpu_dev, args->iommu_domain_id);
+-
+ 	return rknpu_submit(rknpu_dev, args);
+ }
+ #endif

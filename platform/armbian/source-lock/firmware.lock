@@ -1,0 +1,18 @@
+wifi:
+  driver: seekwave-ea6621q
+  source: pending
+  version: pending
+  license: GPL-2.0
+  checksum: pending
+
+mali:
+  source: pending
+  version: pending
+  license: proprietary (ARM)
+  checksum: pending
+
+mpp:
+  source: rockchip-linux/mpp
+  version: pending
+  license: Apache-2.0
+  checksum: pending

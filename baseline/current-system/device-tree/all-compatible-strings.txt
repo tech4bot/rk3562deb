@@ -1,0 +1,231 @@
+/sys/firmware/devicetree/base/adc-keys/compatible: adc-keys 
+/sys/firmware/devicetree/base/arm-pmu/compatible: arm,cortex-a53-pmu 
+/sys/firmware/devicetree/base/backlight/compatible: pwm-backlight 
+/sys/firmware/devicetree/base/can@ff600000/compatible: rockchip,rk3562-can 
+/sys/firmware/devicetree/base/can@ff610000/compatible: rockchip,rk3562-can 
+/sys/firmware/devicetree/base/charge-animation/compatible: rockchip,uboot-charge 
+/sys/firmware/devicetree/base/clock-controller@ff100000/compatible: rockchip,rk3562-cru 
+/sys/firmware/devicetree/base/clocks/compatible: simple-bus 
+/sys/firmware/devicetree/base/compatible: rockchip,rk3562-rk817-tablet rockchip,rk3562 
+/sys/firmware/devicetree/base/cpu0-opp-table/compatible: operating-points-v2 
+/sys/firmware/devicetree/base/cpuinfo/compatible: rockchip,cpuinfo 
+/sys/firmware/devicetree/base/crypto@ff8a0000/compatible: rockchip,crypto-v4 
+/sys/firmware/devicetree/base/csi2-dphy0-hw@ff3c0000/compatible: rockchip,rk3562-csi2-dphy-hw 
+/sys/firmware/devicetree/base/csi2-dphy0/compatible: rockchip,rk3562-csi2-dphy 
+/sys/firmware/devicetree/base/csi2-dphy1-hw@ff3d0000/compatible: rockchip,rk3562-csi2-dphy-hw 
+/sys/firmware/devicetree/base/csi2-dphy1/compatible: rockchip,rk3562-csi2-dphy 
+/sys/firmware/devicetree/base/csi2-dphy2/compatible: rockchip,rk3562-csi2-dphy 
+/sys/firmware/devicetree/base/csi2-dphy3/compatible: rockchip,rk3562-csi2-dphy 
+/sys/firmware/devicetree/base/csi2-dphy4/compatible: rockchip,rk3562-csi2-dphy 
+/sys/firmware/devicetree/base/csi2-dphy5/compatible: rockchip,rk3562-csi2-dphy 
+/sys/firmware/devicetree/base/csu/compatible: rockchip,rk3562-csu 
+/sys/firmware/devicetree/base/debug@fed90000/compatible: rockchip,debug 
+/sys/firmware/devicetree/base/dfi@ff4c0000/compatible: rockchip,rk3562-dfi 
+/sys/firmware/devicetree/base/display-subsystem/compatible: rockchip,display-subsystem 
+/sys/firmware/devicetree/base/dma-controller@ff990000/compatible: arm,pl330 arm,primecell 
+/sys/firmware/devicetree/base/dma-controller@ff9a0000/compatible: rockchip,rk3562-dma rockchip,dma-v1 
+/sys/firmware/devicetree/base/dmc-opp-table/compatible: operating-points-v2 
+/sys/firmware/devicetree/base/dmc/compatible: rockchip,rk3562-dmc 
+/sys/firmware/devicetree/base/dsi@ffb10000/compatible: rockchip,rk3562-mipi-dsi 
+/sys/firmware/devicetree/base/dsm@ff850000/compatible: rockchip,rk3562-dsm 
+/sys/firmware/devicetree/base/ethernet@ffa80000/compatible: rockchip,rk3562-gmac snps,dwmac-4.20a 
+/sys/firmware/devicetree/base/ethernet@ffb30000/compatible: rockchip,rk3562-gmac 
+/sys/firmware/devicetree/base/fiq-debugger/compatible: rockchip,fiq-debugger 
+/sys/firmware/devicetree/base/gpio-leds/compatible: gpio-leds 
+/sys/firmware/devicetree/base/gpu-opp-table-bsp/compatible: operating-points-v2 
+/sys/firmware/devicetree/base/gpu-opp-table/compatible: operating-points-v2 
+/sys/firmware/devicetree/base/gpu@ff320000/compatible: arm,mali-bifrost 
+/sys/firmware/devicetree/base/hwspinlock@ff9e0000/compatible: rockchip,hwspinlock 
+/sys/firmware/devicetree/base/i2c@ff200000/compatible: rockchip,rk3562-i2c rockchip,rk3399-i2c 
+/sys/firmware/devicetree/base/i2c@ffa00000/compatible: rockchip,rk3562-i2c rockchip,rk3399-i2c 
+/sys/firmware/devicetree/base/i2c@ffa10000/compatible: rockchip,rk3562-i2c rockchip,rk3399-i2c 
+/sys/firmware/devicetree/base/i2c@ffa20000/compatible: rockchip,rk3562-i2c rockchip,rk3399-i2c 
+/sys/firmware/devicetree/base/i2c@ffa30000/compatible: rockchip,rk3562-i2c rockchip,rk3399-i2c 
+/sys/firmware/devicetree/base/i2c@ffa40000/compatible: rockchip,rk3562-i2c rockchip,rk3399-i2c 
+/sys/firmware/devicetree/base/interrupt-controller@fe901000/compatible: arm,gic-400 
+/sys/firmware/devicetree/base/iommu@ff30a000/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff340800/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff36f000/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff3e0800/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff3f7f00/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff407e00/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff440f00/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/iommu@ff450480/compatible: rockchip,iommu-v2 
+/sys/firmware/devicetree/base/isp@ff3f0000/compatible: rockchip,rk3562-rkisp 
+/sys/firmware/devicetree/base/jpegd@ff450000/compatible: rockchip,rkv-jpeg-decoder-v1 
+/sys/firmware/devicetree/base/mailbox@ff290000/compatible: rockchip,rk3562-mailbox rockchip,rk3368-mailbox 
+/sys/firmware/devicetree/base/mailbox@ffae0000/compatible: rockchip,rk3562-mailbox rockchip,rk3368-mailbox 
+/sys/firmware/devicetree/base/mipi0-csi2-hw@ff380000/compatible: rockchip,rk3562-mipi-csi2-hw 
+/sys/firmware/devicetree/base/mipi0-csi2/compatible: rockchip,rk3562-mipi-csi2 
+/sys/firmware/devicetree/base/mipi1-csi2-hw@ff390000/compatible: rockchip,rk3562-mipi-csi2-hw 
+/sys/firmware/devicetree/base/mipi1-csi2/compatible: rockchip,rk3562-mipi-csi2 
+/sys/firmware/devicetree/base/mipi2-csi2-hw@ff3a0000/compatible: rockchip,rk3562-mipi-csi2-hw 
+/sys/firmware/devicetree/base/mipi2-csi2/compatible: rockchip,rk3562-mipi-csi2 
+/sys/firmware/devicetree/base/mipi3-csi2-hw@ff3b0000/compatible: rockchip,rk3562-mipi-csi2-hw 
+/sys/firmware/devicetree/base/mipi3-csi2/compatible: rockchip,rk3562-mipi-csi2 
+/sys/firmware/devicetree/base/mmc@ff870000/compatible: rockchip,rk3562-dwcmshc rockchip,rk3528-dwcmshc 
+/sys/firmware/devicetree/base/mmc@ff880000/compatible: rockchip,rk3562-dw-mshc rockchip,rk3288-dw-mshc 
+/sys/firmware/devicetree/base/mmc@ff890000/compatible: rockchip,rk3562-dw-mshc rockchip,rk3288-dw-mshc 
+/sys/firmware/devicetree/base/mpp-srv/compatible: rockchip,mpp-service 
+/sys/firmware/devicetree/base/npu-opp-table/compatible: operating-points-v2 
+/sys/firmware/devicetree/base/npu@ff300000/compatible: rockchip,rk3562-rknpu 
+/sys/firmware/devicetree/base/otp@ff930000/compatible: rockchip,rk3562-otp 
+/sys/firmware/devicetree/base/pcie@ff500000/compatible: rockchip,rk3562-pcie snps,dw-pcie 
+/sys/firmware/devicetree/base/pdm@ff830000/compatible: rockchip,rk3562-pdm rockchip,rv1126-pdm 
+/sys/firmware/devicetree/base/phy@ff750000/compatible: rockchip,rk3562-naneng-combphy 
+/sys/firmware/devicetree/base/phy@ffb20000/compatible: rockchip,rk3562-dsi-dphy rockchip,rk3562-video-phy rockchip,rk3568-dsi-dphy rockchip,rk3568-video-phy 
+/sys/firmware/devicetree/base/pinctrl/compatible: rockchip,rk3562-pinctrl 
+/sys/firmware/devicetree/base/power-management@ff258000/compatible: rockchip,rk3562-pmu syscon simple-mfd 
+/sys/firmware/devicetree/base/psci/compatible: arm,psci-1.0 
+/sys/firmware/devicetree/base/pwm@ff230000/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff230010/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff230020/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff230030/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff700000/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff700010/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff700020/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff700030/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff710000/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff710010/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff710020/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff710030/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff720000/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff720010/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff720020/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/pwm@ff720030/compatible: rockchip,rk3562-pwm rockchip,rk3328-pwm 
+/sys/firmware/devicetree/base/qos@fee03800/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee10000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee10100/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee10200/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee10300/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee10400/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee20000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee20100/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee30000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee40000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee50000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee60000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee70000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee70100/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee80000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee90000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee90100/compatible: syscon 
+/sys/firmware/devicetree/base/qos@fee90200/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feea0000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feea0100/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0000/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0100/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0200/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0300/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0400/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0500/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0600/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0700/compatible: syscon 
+/sys/firmware/devicetree/base/qos@feeb0800/compatible: syscon 
+/sys/firmware/devicetree/base/rga@ff440000/compatible: rockchip,rga2_core0 
+/sys/firmware/devicetree/base/rk817-sound/compatible: rockchip,multicodecs-card 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds-sditf-vir1/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds-sditf-vir2/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds-sditf-vir3/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds-sditf/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds/compatible: rockchip,rkcif-mipi-lvds 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds1-sditf-vir1/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds1-sditf-vir2/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds1-sditf-vir3/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds1-sditf/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds1/compatible: rockchip,rkcif-mipi-lvds 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds2-sditf-vir1/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds2-sditf-vir2/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds2-sditf-vir3/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds2-sditf/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds2/compatible: rockchip,rkcif-mipi-lvds 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds3-sditf-vir1/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds3-sditf-vir2/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds3-sditf-vir3/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds3-sditf/compatible: rockchip,rkcif-sditf 
+/sys/firmware/devicetree/base/rkcif-mipi-lvds3/compatible: rockchip,rkcif-mipi-lvds 
+/sys/firmware/devicetree/base/rkcif@ff3e0000/compatible: rockchip,rk3562-cif 
+/sys/firmware/devicetree/base/rkisp-vir0/compatible: rockchip,rkisp-vir 
+/sys/firmware/devicetree/base/rkisp-vir1/compatible: rockchip,rkisp-vir 
+/sys/firmware/devicetree/base/rkisp-vir2/compatible: rockchip,rkisp-vir 
+/sys/firmware/devicetree/base/rkisp-vir3/compatible: rockchip,rkisp-vir 
+/sys/firmware/devicetree/base/rkvdec@ff340100/compatible: rockchip,rkv-decoder-rk3562 rockchip,rkv-decoder-v2 
+/sys/firmware/devicetree/base/rkvenc@ff360000/compatible: rockchip,rkv-encoder-rk3562 rockchip,rkv-encoder-v2 
+/sys/firmware/devicetree/base/rng@ff8e0000/compatible: rockchip,rkrng 
+/sys/firmware/devicetree/base/rockchip-suspend/compatible: rockchip,pm-rk3562 
+/sys/firmware/devicetree/base/rockchip-system-monitor/compatible: rockchip,system-monitor 
+/sys/firmware/devicetree/base/sai@ff800000/compatible: rockchip,rk3562-sai rockchip,sai-v1 
+/sys/firmware/devicetree/base/sai@ff810000/compatible: rockchip,rk3562-sai rockchip,sai-v1 
+/sys/firmware/devicetree/base/sai@ff820000/compatible: rockchip,rk3562-sai rockchip,sai-v1 
+/sys/firmware/devicetree/base/saradc@ff730000/compatible: rockchip,rk3562-saradc 
+/sys/firmware/devicetree/base/saradc@ffaa0000/compatible: rockchip,rk3562-saradc 
+/sys/firmware/devicetree/base/scmi-shmem@10f000/compatible: arm,scmi-shmem 
+/sys/firmware/devicetree/base/sdio-pwrseq/compatible: mmc-pwrseq-simple 
+/sys/firmware/devicetree/base/seekwcn_boot/compatible: seekwave,sv6160 
+/sys/firmware/devicetree/base/serial@ff210000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff670000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff680000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff690000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff6a0000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff6b0000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff6c0000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff6d0000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff6e0000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/serial@ff6f0000/compatible: rockchip,rk3562-uart snps,dw-apb-uart 
+/sys/firmware/devicetree/base/shaping@fee03888/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee10088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee10188/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee10288/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee10388/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee20088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee20188/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee30088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee40088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee50088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee60088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee70088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee70188/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee80088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee90088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee90188/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@fee90288/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feea0088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feea0188/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0088/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0188/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0288/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0388/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0488/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0588/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0688/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0788/compatible: syscon 
+/sys/firmware/devicetree/base/shaping@feeb0888/compatible: syscon 
+/sys/firmware/devicetree/base/spdif@ff840000/compatible: rockchip,rk3562-spdif rockchip,rk3568-spdif 
+/sys/firmware/devicetree/base/spi@ff220000/compatible: rockchip,rk3066-spi 
+/sys/firmware/devicetree/base/spi@ff640000/compatible: rockchip,rk3066-spi 
+/sys/firmware/devicetree/base/spi@ff650000/compatible: rockchip,rk3066-spi 
+/sys/firmware/devicetree/base/spi@ff860000/compatible: rockchip,sfc 
+/sys/firmware/devicetree/base/syscon@ff010000/compatible: rockchip,rk3562-pmu-grf syscon simple-mfd 
+/sys/firmware/devicetree/base/syscon@ff030000/compatible: rockchip,rk3562-sys-grf syscon simple-mfd 
+/sys/firmware/devicetree/base/syscon@ff040000/compatible: rockchip,rk3562-peri-grf syscon 
+/sys/firmware/devicetree/base/syscon@ff060000/compatible: rockchip,rk3562-ioc-grf syscon simple-mfd 
+/sys/firmware/devicetree/base/syscon@ff090000/compatible: rockchip,rk3562-usbphy-grf syscon 
+/sys/firmware/devicetree/base/syscon@ff098000/compatible: rockchip,rk3562-pipephy-grf syscon 
+/sys/firmware/devicetree/base/timer/compatible: arm,armv8-timer 
+/sys/firmware/devicetree/base/timer@ffa50000/compatible: rockchip,rk3562-timer rockchip,rk3288-timer 
+/sys/firmware/devicetree/base/tsadc@ffa70000/compatible: rockchip,rk3562-tsadc 
+/sys/firmware/devicetree/base/usb2-phy@ff740000/compatible: rockchip,rk3562-usb2phy 
+/sys/firmware/devicetree/base/usb@fed00000/compatible: generic-ehci 
+/sys/firmware/devicetree/base/usb@fed40000/compatible: generic-ohci 
+/sys/firmware/devicetree/base/usbdrd/compatible: rockchip,rk3562-dwc3 rockchip,rk3399-dwc3 
+/sys/firmware/devicetree/base/vcc-mipipwr-regulator/compatible: regulator-fixed 
+/sys/firmware/devicetree/base/vcc-sd/compatible: regulator-gpio 
+/sys/firmware/devicetree/base/vcc-sys/compatible: regulator-fixed 
+/sys/firmware/devicetree/base/vcc3v3-lcd0-n/compatible: regulator-fixed 
+/sys/firmware/devicetree/base/vdd-gpu/compatible: pwm-regulator 
+/sys/firmware/devicetree/base/vdd-npu/compatible: pwm-regulator 
+/sys/firmware/devicetree/base/vendor-storage/compatible: rockchip,ram-vendor-storage 
+/sys/firmware/devicetree/base/vop@ff400000/compatible: rockchip,rk3562-vop 
+/sys/firmware/devicetree/base/watchdog@ffa60000/compatible: snps,dw-wdt 
+/sys/firmware/devicetree/base/wireless-bluetooth/compatible: bluetooth-platdata 
+/sys/firmware/devicetree/base/wireless-wlan/compatible: wlan-platdata 

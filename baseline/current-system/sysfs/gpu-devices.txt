@@ -1,0 +1,11 @@
+crw-rw-rw- 1 root video 10, 127 Jun 11 22:37 /dev/mali0
+
+/dev/dri/:
+total 0
+drwxr-xr-x   3 root root        140 Jun 11 22:37 .
+drwxr-xr-x  13 root root       4860 Jun 18 20:12 ..
+drwxr-xr-x   2 root root        120 Jun 11 22:37 by-path
+crw-rw----+  1 root video  226,   0 Jun 11 22:37 card0
+crw-rw----+  1 root video  226,   1 Jun 11 22:37 card1
+crw-rw----+  1 root render 226, 128 Jun 11 22:37 renderD128
+crw-rw----+  1 root render 226, 129 Jun 11 22:37 renderD129

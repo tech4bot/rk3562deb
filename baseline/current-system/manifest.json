@@ -1,0 +1,9 @@
+{
+  "capture_type": "samwise-baseline",
+  "capture_date": "2026-06-18T20:12:58-07:00",
+  "target_host": "frodo@192.168.11.167",
+  "target_port": 22,
+  "capture_script": "capture-samwise-baseline.sh",
+  "capture_host": "Conrad",
+  "notes": "Read-only baseline capture from known-good system"
+}

@@ -1,0 +1,2 @@
+rockchip,rk3562-rk817-tablet
+rockchip,rk3562
