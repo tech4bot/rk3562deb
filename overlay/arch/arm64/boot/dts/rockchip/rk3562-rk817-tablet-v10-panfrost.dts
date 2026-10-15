@@ -287,6 +287,12 @@
 
 		width-mm = <135>;
 		height-mm = <216>;
+		/*
+		 * Keep early boot/KMS in landscape for this tablet panel orientation
+		 * (matching the camera-top side used by userspace).
+		 */
+		rotation = <90>;
+
 		bpc = <8>;
 		bus-format = <0x100a>; /* MEDIA_BUS_FMT_RGB888_1X24 — avoids vop3_output_rb_swap which incorrectly applies DSP_RB_SWAP on RK3562 (VOP2 not VOP3) */
 
@@ -386,6 +392,14 @@
 		opp-500000000 {
 			opp-hz = /bits/ 64 <500000000>;
 			opp-microvolt = <825000>;
+		};
+		opp-600000000 {
+			opp-hz = /bits/ 64 <600000000>;
+			opp-microvolt = <825000>;
+		};
+		opp-700000000 {
+			opp-hz = /bits/ 64 <700000000>;
+			opp-microvolt = <900000>;
 		};
 	};
 };

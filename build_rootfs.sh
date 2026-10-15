@@ -22,7 +22,7 @@ ROOTFS_MNT="${OUT_DIR}/rootfs"
 MODULES_DIR="${OUT_DIR}/modules_staging/lib/modules"
 RKDEBIAN_DISPLAY_SERVER="${RKDEBIAN_DISPLAY_SERVER:-wayland}"
 RKDEBIAN_CPU_GOVERNOR="${RKDEBIAN_CPU_GOVERNOR:-performance}"
-RKDEBIAN_GPU_STACK="${RKDEBIAN_GPU_STACK:-mali}"
+RKDEBIAN_GPU_STACK="${RKDEBIAN_GPU_STACK:-panfrost}"
 RKDEBIAN_UI_SESSION="${RKDEBIAN_UI_SESSION:-phosh}"
 RKDEBIAN_MALI_GBM_PROVIDER="${RKDEBIAN_MALI_GBM_PROVIDER:-vendor}"
 RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE:-1}"
@@ -99,6 +99,7 @@ chroot_cleanup() {
             cleaned=1
         fi
 
+        mount --make-rslave "${mount_path}" 2>/dev/null || true
         umount -l "${mount_path}" 2>/dev/null || true
     done < <(
         findmnt -rn -o TARGET 2>/dev/null \
@@ -143,11 +144,13 @@ fi
 
 # 2. Setup chroot mounts
 echo "[*] Setting up chroot mounts..."
-mkdir -p "${ROOTFS_MNT}/proc" "${ROOTFS_MNT}/sys" "${ROOTFS_MNT}/dev/pts"
-mount --bind /proc    "${ROOTFS_MNT}/proc"
-mount --bind /sys     "${ROOTFS_MNT}/sys"
-mount --bind /dev     "${ROOTFS_MNT}/dev"
-mount --bind /dev/pts "${ROOTFS_MNT}/dev/pts"
+mkdir -p "${ROOTFS_MNT}/proc" "${ROOTFS_MNT}/sys" "${ROOTFS_MNT}/dev"
+mount --rbind /proc    "${ROOTFS_MNT}/proc"
+mount --make-rslave    "${ROOTFS_MNT}/proc"
+mount --rbind /sys     "${ROOTFS_MNT}/sys"
+mount --make-rslave    "${ROOTFS_MNT}/sys"
+mount --rbind /dev     "${ROOTFS_MNT}/dev"
+mount --make-rslave    "${ROOTFS_MNT}/dev"
 rm -f "${ROOTFS_MNT}/etc/resolv.conf"
 cp /etc/resolv.conf "${ROOTFS_MNT}/etc/resolv.conf"
 
@@ -195,7 +198,7 @@ apt-get -f install -y || \
     echo "[!] Warning: apt dependency repair failed; continuing with base package install."
 apt-get install -y sudo curl wget nano vim openssh-server network-manager wpasupplicant iw wireless-tools \
     network-manager-gnome bluez blueman \
-    xorg xserver-xorg xserver-xorg-input-libinput firefox-esr mesa-utils libgl1-mesa-dri mesa-vulkan-drivers \
+    xorg xserver-xorg xserver-xorg-input-libinput firefox-esr mesa-utils libgl1-mesa-dri mesa-vulkan-drivers mesa-opencl-icd vulkan-tools \
     pipewire pipewire-audio pipewire-alsa pipewire-pulse wireplumber pavucontrol alsa-utils libasound2-plugins \
     pipewire-libcamera libcamera-ipa libcamera-v4l2 \
     gedit \
@@ -499,6 +502,14 @@ for ply_unit in plymouth-start.service plymouth-quit.service plymouth-quit-wait.
     fi
 done
 
+# Show splash immediately on fast-booting RK3562 images.
+mkdir -p /etc/plymouth
+cat > /etc/plymouth/plymouthd.conf << 'PLYMOUTHD_CONF'
+[Daemon]
+ShowDelay=0
+PLYMOUTHD_CONF
+
+
 CHROOT_EOF
 
 chmod +x "${ROOTFS_MNT}/tmp/setup_debian.sh"
@@ -642,6 +653,12 @@ if [ "${RKDEBIAN_GPU_STACK}" = "panfrost" ]; then
           "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/libmali-hook.so" \
           "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/libmali-hook.so.1" \
           "${ROOTFS_MNT}/etc/ld.so.conf.d/00-aarch64-mali.conf"
+    # Disable AFBC scanout for Panfrost on RK3562 (avoids crashes in Wayland compositors)
+    touch "${ROOTFS_MNT}/etc/environment"
+    if ! grep -q "PAN_MESA_DEBUG=noafbc" "${ROOTFS_MNT}/etc/environment"; then
+        echo "PAN_MESA_DEBUG=noafbc" >> "${ROOTFS_MNT}/etc/environment"
+    fi
+
     chroot "${ROOTFS_MNT}" ldconfig
 else
     # Mali userspace stack. Default is to keep vendor libgbm as shipped by the
@@ -966,150 +983,26 @@ cat > "${ROOTFS_MNT}/usr/lib/firefox-esr/distribution/policies.json" << 'FIREFOX
 }
 FIREFOX_POLICIES
 
-# ── Custom Plymouth boot splash ────────────────────────────────────────────
-# Replaces the plain black screen with a navy gradient, "RK3562 / Debian
-# GNU/Linux" text, a faded divider line, and 5 pulsing dots.
-# PNG assets are generated with pure Python (no PIL dependency).
+# Install custom Plymouth boot splash theme.
 echo "[*] Installing custom Plymouth boot splash..."
 THEME_DIR="${ROOTFS_MNT}/usr/share/plymouth/themes/rkdebian"
 mkdir -p "${THEME_DIR}"
+rm -f "${THEME_DIR}/dot.png"
 
-# dot.png — 14×14 soft-edged white circle for the loading dots
-python3 - "${THEME_DIR}/dot.png" << 'PYGEN'
-import sys, zlib, struct
-
-def write_png(path, w, h, rows_rgba):
-    def chunk(tag, data):
-        crc = zlib.crc32(tag + data) & 0xffffffff
-        return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
-    raw = b''.join(b'\x00' + bytes(r) for r in rows_rgba)
-    with open(path, 'wb') as f:
-        f.write(b'\x89PNG\r\n\x1a\n')
-        f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)))
-        f.write(chunk(b'IDAT', zlib.compress(raw, 9)))
-        f.write(chunk(b'IEND', b''))
-
-W = H = 14
-cx = cy = W / 2.0
-r  = W / 2.0 - 1.0
-rows = []
-for y in range(H):
-    row = []
-    for x in range(W):
-        d     = ((x + 0.5 - cx)**2 + (y + 0.5 - cy)**2)**0.5
-        alpha = min(255, max(0, int((r - d) * 90)))
-        row  += [255, 255, 255, alpha]
-    rows.append(row)
-write_png(sys.argv[1], W, H, rows)
-PYGEN
-
-# line.png — 280×2 white bar that fades at both edges (decorative divider)
-python3 - "${THEME_DIR}/line.png" << 'PYGEN'
-import sys, zlib, struct
-
-def write_png(path, w, h, rows_rgba):
-    def chunk(tag, data):
-        crc = zlib.crc32(tag + data) & 0xffffffff
-        return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
-    raw = b''.join(b'\x00' + bytes(r) for r in rows_rgba)
-    with open(path, 'wb') as f:
-        f.write(b'\x89PNG\r\n\x1a\n')
-        f.write(chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)))
-        f.write(chunk(b'IDAT', zlib.compress(raw, 9)))
-        f.write(chunk(b'IEND', b''))
-
-W, H = 280, 2
-rows = []
-for y in range(H):
-    row = []
-    for x in range(W):
-        fade  = min(x, W - x) / 28.0
-        alpha = min(255, int(55 * min(1.0, fade)))
-        row  += [255, 255, 255, alpha]
-    rows.append(row)
-write_png(sys.argv[1], W, H, rows)
-PYGEN
-
-# splash.png — custom boot logo from repository root
+# splash.png - custom boot logo from repository root.
 if [ ! -f "${ROOT_DIR}/splash.png" ]; then
     echo "[-] Error: missing ${ROOT_DIR}/splash.png (required for Plymouth logo)."
     exit 1
 fi
 install -m 0644 "${ROOT_DIR}/splash.png" "${THEME_DIR}/splash.png"
+# Generate pre-rotated portrait variant for portrait display modes (avoids runtime script rotation crash)
+python3 -c "from PIL import Image; im = Image.open('${ROOT_DIR}/splash.png'); im.transpose(Image.ROTATE_270).save('${THEME_DIR}/splash-portrait.png')" 2>/dev/null || \
+    cp -f "${THEME_DIR}/splash.png" "${THEME_DIR}/splash-portrait.png"
 mkdir -p "${ROOTFS_MNT}/usr/share/backgrounds/rkdebian"
 install -m 0644 "${ROOT_DIR}/splash.png" \
     "${ROOTFS_MNT}/usr/share/backgrounds/rkdebian/splash.png"
 
-# Static framebuffer logo shown while booting. This bypasses Plymouth, which
-# currently crashes on this Trixie + RK3562 stack.
-mkdir -p "${ROOTFS_MNT}/usr/local/sbin" \
-         "${ROOTFS_MNT}/etc/systemd/system" \
-         "${ROOTFS_MNT}/etc/systemd/system/graphical.target.wants"
-cat > "${ROOTFS_MNT}/usr/local/sbin/boot-fb-logo.sh" << 'BOOT_FB_LOGO'
-#!/bin/sh
-set -eu
-
-IMG="/usr/share/plymouth/themes/rkdebian/splash.png"
-FB="/dev/fb0"
-
-[ -r "$IMG" ] || exit 0
-command -v ffmpeg >/dev/null 2>&1 || exit 0
-
-# Wait briefly for framebuffer device.
-i=0
-while [ $i -lt 40 ]; do
-    [ -w "$FB" ] && break
-    i=$((i + 1))
-    sleep 0.1
-done
-[ -w "$FB" ] || exit 0
-
-W=800
-H=1280
-if [ -r /sys/class/graphics/fb0/virtual_size ]; then
-    VS="$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null || true)"
-    case "$VS" in
-        *,*) W="${VS%%,*}"; H="${VS##*,}" ;;
-    esac
-fi
-
-# The panel is rotated by kernel cmdline; rotate logo into expected orientation.
-ROTATE_FILTER="transpose=1"
-
-# Draw a centered, padded static splash. Repeat to survive early mode changes.
-N=0
-while [ $N -lt 5 ]; do
-    ffmpeg -nostdin -hide_banner -loglevel error -y \
-        -i "$IMG" -frames:v 1 \
-        -vf "${ROTATE_FILTER},scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2" \
-        -pix_fmt bgra -f fbdev "$FB" >/dev/null 2>&1 || true
-    N=$((N + 1))
-    sleep 0.2
-done
-
-exit 0
-BOOT_FB_LOGO
-chmod +x "${ROOTFS_MNT}/usr/local/sbin/boot-fb-logo.sh"
-
-cat > "${ROOTFS_MNT}/etc/systemd/system/boot-fb-logo.service" << 'BOOT_FB_LOGO_UNIT'
-[Unit]
-Description=Draw static boot logo on framebuffer
-After=systemd-udev-settle.service
-Before=display-manager.service lightdm.service
-ConditionPathExists=/dev/fb0
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/sbin/boot-fb-logo.sh
-TimeoutStartSec=15
-
-[Install]
-WantedBy=graphical.target
-BOOT_FB_LOGO_UNIT
-ln -sfn /etc/systemd/system/boot-fb-logo.service \
-    "${ROOTFS_MNT}/etc/systemd/system/graphical.target.wants/boot-fb-logo.service"
-
-# Theme descriptor
+# Theme descriptor.
 cat > "${THEME_DIR}/rkdebian.plymouth" << 'PLYMOUTH_DESC'
 [Plymouth Theme]
 Name=rkdebian
@@ -1121,7 +1014,7 @@ ImageDir=/usr/share/plymouth/themes/rkdebian
 ScriptFile=/usr/share/plymouth/themes/rkdebian/rkdebian.script
 PLYMOUTH_DESC
 
-# Animation script — runs inside Plymouth on the framebuffer
+# Static script: black background + centered logo.
 cat > "${THEME_DIR}/rkdebian.script" << 'PLYMOUTH_SCRIPT'
 W = Window.GetWidth();
 H = Window.GetHeight();
@@ -1130,10 +1023,14 @@ H = Window.GetHeight();
 Window.SetBackgroundTopColor(0.00, 0.00, 0.00);
 Window.SetBackgroundBottomColor(0.00, 0.00, 0.00);
 
-# ── Logo ───────────────────────────────────────────────────────────────────
-logo_base = Image("splash.png");
+# Centered logo (use pre-rotated portrait asset if panel is in native portrait)
+if (W < H) {
+    logo_base = Image("splash-portrait.png");
+} else {
+    logo_base = Image("splash.png");
+}
 logo_scale_w = (W * 0.78) / logo_base.GetWidth();
-logo_scale_h = (H * 0.45) / logo_base.GetHeight();
+logo_scale_h = (H * 0.78) / logo_base.GetHeight();
 logo_scale = Math.Min(logo_scale_w, logo_scale_h);
 if (logo_scale > 1.0) logo_scale = 1.0;
 logo = logo_base.Scale(logo_base.GetWidth() * logo_scale,
@@ -1141,39 +1038,10 @@ logo = logo_base.Scale(logo_base.GetWidth() * logo_scale,
 logo_spr = Sprite();
 logo_spr.SetImage(logo);
 logo_spr.SetX(Math.Int(W / 2 - logo.GetWidth() / 2));
-logo_spr.SetY(Math.Int(H * 0.18));
-
-# ── Pulsing dot loader (5 dots, wave ripple) ───────────────────────────────
-N      = 5;
-STEP   = 22;
-DOT_Y  = Math.Int(H * 0.73);
-ORIGIN = Math.Int(W / 2 - (N - 1) * STEP / 2);
-
-dot_img = Image("dot.png");
-for (i = 0; i < N; i++) {
-    dot[i] = Sprite();
-    dot[i].SetImage(dot_img);
-    dot[i].SetX(ORIGIN + i * STEP - Math.Int(dot_img.GetWidth() / 2));
-    dot[i].SetY(DOT_Y);
-    dot[i].SetOpacity(0.15);
-}
-
-tick = 0;
-fun animate() {
-    tick++;
-    peak = Math.Int(tick / 7) % N;
-    for (i = 0; i < N; i++) {
-        diff = i - peak;
-        if (diff < 0) diff = -diff;
-        opacity = 1.0 - diff * 0.25;
-        if (opacity < 0.10) opacity = 0.10;
-        dot[i].SetOpacity(opacity);
-    }
-}
-Plymouth.SetRefreshFunction(animate);
+logo_spr.SetY(Math.Int(H / 2 - logo.GetHeight() / 2));
 PLYMOUTH_SCRIPT
 
-# Activate the theme (overrides the 'spinner' set earlier in the chroot)
+# Activate the custom theme.
 chroot "${ROOTFS_MNT}" plymouth-set-default-theme rkdebian 2>/dev/null || \
     echo "[!] Warning: could not set Plymouth theme; 'spinner' will be used"
 
@@ -1199,9 +1067,6 @@ CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-compositing"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --password-store=basic"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-accelerated-video-decode"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,UseChromeOSDirectVideoDecoder"
-# RK3562 fallback safety profile: software compositing is slower but avoids
-# GPU process crashes seen on some YouTube/Wayland workloads.
-CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-gpu"
 # Optional (faster but less stable on some images): enable VAAPI decode
 # CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
 # CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
@@ -1221,9 +1086,6 @@ CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-rasterization"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-compositing"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --password-store=basic"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-accelerated-video-decode"
-# RK3562 fallback safety profile: software compositing is slower but avoids
-# GPU process crashes seen on some YouTube/Wayland workloads.
-CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-gpu"
 # ── FALLBACK: if Chromium regresses, force ANGLE explicitly: ──
 # CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --use-gl=angle"
 # CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --use-angle=opengles"
@@ -1446,17 +1308,24 @@ session-wrapper=/etc/X11/Xsession
 
 [VNCServer]
 LIGHTDM_CONF
-mkdir -p "${ROOTFS_MNT}/etc/X11" "${ROOTFS_MNT}/etc/systemd/system"
+mkdir -p "${ROOTFS_MNT}/etc/X11" "${ROOTFS_MNT}/etc/systemd/system" \
+         "${ROOTFS_MNT}/etc/systemd/system/lightdm.service.d"
 printf '%s\n' '/usr/sbin/lightdm' > "${ROOTFS_MNT}/etc/X11/default-display-manager"
 ln -sfn /lib/systemd/system/lightdm.service "${ROOTFS_MNT}/etc/systemd/system/display-manager.service"
+cat > "${ROOTFS_MNT}/etc/systemd/system/lightdm.service.d/plymouth-retain.conf" << 'LIGHTDM_PLYMOUTH'
+[Service]
+ExecStartPre=-/usr/bin/plymouth quit --retain-splash
+LIGHTDM_PLYMOUTH
 # Avoid a tty1 text login flicker between boot logo and GUI.
 ln -sfn /dev/null "${ROOTFS_MNT}/etc/systemd/system/getty@tty1.service"
+rm -f "${ROOTFS_MNT}/etc/systemd/system/getty.target.wants/getty@tty1.service"
 
-# Plasma Discover can fail to launch on this Wayland + Mali stack when Qt's
-# default GL path cannot initialize EGL. Provide a software-rendered wrapper
-# and override the desktop entry to keep app store access functional.
-mkdir -p "${ROOTFS_MNT}/usr/local/bin" "${ROOTFS_MNT}/usr/local/share/applications"
-cat > "${ROOTFS_MNT}/usr/local/bin/plasma-discover-safe" << 'PLASMA_DISCOVER_SAFE'
+if [ "${RKDEBIAN_GPU_STACK}" = "mali" ]; then
+    # Plasma Discover can fail to launch on this Wayland + Mali stack when Qt's
+    # default GL path cannot initialize EGL. Provide a software-rendered wrapper
+    # and override the desktop entry to keep app store access functional.
+    mkdir -p "${ROOTFS_MNT}/usr/local/bin" "${ROOTFS_MNT}/usr/local/share/applications"
+    cat > "${ROOTFS_MNT}/usr/local/bin/plasma-discover-safe" << 'PLASMA_DISCOVER_SAFE'
 #!/bin/sh
 set -eu
 export QSG_RHI_BACKEND="${QSG_RHI_BACKEND:-software}"
@@ -1464,14 +1333,15 @@ export QT_QUICK_BACKEND="${QT_QUICK_BACKEND:-software}"
 export QT_OPENGL="${QT_OPENGL:-software}"
 exec /usr/bin/plasma-discover "$@"
 PLASMA_DISCOVER_SAFE
-chmod +x "${ROOTFS_MNT}/usr/local/bin/plasma-discover-safe"
-if [ -f "${ROOTFS_MNT}/usr/share/applications/org.kde.discover.desktop" ]; then
-    cp -f "${ROOTFS_MNT}/usr/share/applications/org.kde.discover.desktop" \
-        "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
-    sed -i 's|^Exec=plasma-discover %F$|Exec=/usr/local/bin/plasma-discover-safe %F|' \
-        "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
-    sed -i 's|^Exec=plasma-discover --mode update$|Exec=/usr/local/bin/plasma-discover-safe --mode update|' \
-        "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+    chmod +x "${ROOTFS_MNT}/usr/local/bin/plasma-discover-safe"
+    if [ -f "${ROOTFS_MNT}/usr/share/applications/org.kde.discover.desktop" ]; then
+        cp -f "${ROOTFS_MNT}/usr/share/applications/org.kde.discover.desktop" \
+            "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+        sed -i 's|^Exec=plasma-discover %F$|Exec=/usr/local/bin/plasma-discover-safe %F|' \
+            "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+        sed -i 's|^Exec=plasma-discover --mode update$|Exec=/usr/local/bin/plasma-discover-safe --mode update|' \
+            "${ROOTFS_MNT}/usr/local/share/applications/org.kde.discover.desktop"
+    fi
 fi
 
 # Stale user-unit symlinks from old sway-focused rootfs trees can trigger
@@ -4467,8 +4337,8 @@ chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-power-profile-sync.sh"
 cat > "${ROOTFS_MNT}/etc/systemd/system/rk-power-profile-sync.service" << 'RK_POWER_PROFILE_SYNC_UNIT'
 [Unit]
 Description=Sync CPU governor/frequency caps with Power Profiles mode
-After=power-profiles-daemon.service rk-power-tune.service
-Wants=power-profiles-daemon.service rk-power-tune.service
+After=rk-power-tune.service
+Wants=rk-power-tune.service
 
 [Service]
 Type=simple

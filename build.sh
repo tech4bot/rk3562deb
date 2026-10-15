@@ -31,7 +31,7 @@ KERNEL_DTB="rk3562-rk817-tablet-v10.dtb"
 KERNEL_DTB_PANFROST="rk3562-rk817-tablet-v10-panfrost.dtb"
 RKDEBIAN_DISPLAY_SERVER="${RKDEBIAN_DISPLAY_SERVER:-wayland}"
 RKDEBIAN_UI_SESSION="${RKDEBIAN_UI_SESSION:-phosh}"
-RKDEBIAN_GPU_STACK="${RKDEBIAN_GPU_STACK:-mali}"
+RKDEBIAN_GPU_STACK="${RKDEBIAN_GPU_STACK:-panfrost}"
 RKDEBIAN_CPU_GOVERNOR="${RKDEBIAN_CPU_GOVERNOR:-performance}"
 RKDEBIAN_FORCE_CLEAN_ROOTFS="${RKDEBIAN_FORCE_CLEAN_ROOTFS:-0}"
 
@@ -291,7 +291,7 @@ EOF
 
 check_deps() {
     echo "[*] Checking dependencies..."
-    local deps=("git" "make" "aarch64-linux-gnu-gcc" "bc" "bison" "flex" "dtc" "genimage" "wget" "tar" "mcopy" "debootstrap" "qemu-aarch64-static" "mkfs.ext4" "e2fsck" "xz")
+    local deps=("git" "make" "aarch64-linux-gnu-gcc" "bc" "bison" "flex" "dtc" "genimage" "wget" "tar" "mcopy" "debootstrap" "qemu-aarch64-static" "mkfs.ext4" "e2fsck" "xz" "mkdosfs")
     for dep in "${deps[@]}"; do
         if ! command -v "$dep" >/dev/null 2>&1; then
             echo "[-] Error: Missing dependency: $dep. Please install it."
@@ -347,8 +347,10 @@ cleanup_stale_rootfs_mounts() {
         fi
 
         if [ "${EUID}" -eq 0 ]; then
+            mount --make-rslave "${mount_path}" 2>/dev/null || true
             umount -l "${mount_path}" 2>/dev/null || true
         else
+            sudo mount --make-rslave "${mount_path}" 2>/dev/null || true
             sudo umount -l "${mount_path}" 2>/dev/null || true
         fi
     done < <(
@@ -492,16 +494,19 @@ build_uboot() {
     ABS_CROSS_COMPILE=$(dirname $(command -v aarch64-linux-gnu-gcc))"/aarch64-linux-gnu-"
     ./make.sh rk3562 CROSS_COMPILE=${ABS_CROSS_COMPILE}
     
+    # Generate BootROM-parseable idblock (RKNS magic) for SD/eMMC boot
+    ./make.sh --idblock 2>/dev/null || true
+    
     # Store artifacts
     local spl_loader=""
-    if ls -1 rk3562_spl_loader_*.bin 2>/dev/null | head -n1 >/dev/null; then
-        spl_loader=$(ls -1 rk3562_spl_loader_*.bin 2>/dev/null | head -n1)
-    elif ls -1 rk3562_loader_*.bin 2>/dev/null | head -n1 >/dev/null; then
-        spl_loader=$(ls -1 rk3562_loader_*.bin 2>/dev/null | head -n1)
-    elif [ -f "idblock.bin" ]; then
+    if [ -f "idblock.bin" ]; then
         spl_loader="idblock.bin"
     elif [ -f "idblock.img" ]; then
         spl_loader="idblock.img"
+    elif ls -1 rk3562_spl_loader_*.bin 2>/dev/null | head -n1 >/dev/null; then
+        spl_loader=$(ls -1 rk3562_spl_loader_*.bin 2>/dev/null | head -n1)
+    elif ls -1 rk3562_loader_*.bin 2>/dev/null | head -n1 >/dev/null; then
+        spl_loader=$(ls -1 rk3562_loader_*.bin 2>/dev/null | head -n1)
     fi
 
     if [ -z "${spl_loader}" ]; then
@@ -647,6 +652,22 @@ build_kernel() {
             echo "[*] Applying RK8xx clkout name match fix..."
             if ! git apply --whitespace=nowarn "${rk8xx_clkout_patch}"; then
                 echo "[-] Error: failed to apply RK8xx clkout name match fix."
+                exit 1
+            fi
+        fi
+    fi
+
+    # Panfrost RK3562 clock fix:
+    # ensure Panfrost enables all supplementary AXI/APB clocks defined in the DTS
+    # otherwise early GPU initialization causes a bus fault / black screen on boot.
+    local panfrost_clocks_patch="${ROOT_DIR}/overlay/kernel-patches/panfrost-rk3562-clocks.patch"
+    if [ -f "${panfrost_clocks_patch}" ]; then
+        if grep -q "extra_clocks" drivers/gpu/drm/panfrost/panfrost_device.c; then
+            echo "[*] Panfrost RK3562 clocks fix already present."
+        else
+            echo "[*] Applying Panfrost RK3562 clocks fix..."
+            if ! git apply --whitespace=nowarn "${panfrost_clocks_patch}"; then
+                echo "[-] Error: failed to apply Panfrost RK3562 clocks fix."
                 exit 1
             fi
         fi
@@ -818,6 +839,11 @@ create_image() {
     # - override: ROOTFS_IMAGE_SIZE=<size> (examples: 4G, 3584M)
     # The rootfs is expanded on first boot by expand-rootfs.service, so we keep
     # the build artifact compact while preserving enough installation headroom.
+    local SUDO_CMD=""
+    if [ "${EUID}" -ne 0 ]; then
+        SUDO_CMD="sudo "
+    fi
+
     local rootfs_image_size="${ROOTFS_IMAGE_SIZE:-auto}"
     if [ "${rootfs_image_size}" = "auto" ]; then
         local rootfs_used_bytes reserve_bytes min_bytes align_bytes size_bytes
@@ -830,7 +856,7 @@ create_image() {
         case "${min_mb}" in
             ''|*[!0-9]*) min_mb=2560 ;;
         esac
-        rootfs_used_bytes=$(sudo du -s -B1 "${OUT_DIR}/rootfs" | awk '{print $1}')
+        rootfs_used_bytes=$(${SUDO_CMD}du -s -B1 "${OUT_DIR}/rootfs" | awk '{print $1}')
         reserve_bytes=$((reserve_mb * 1024 * 1024))
         min_bytes=$((min_mb * 1024 * 1024))
         align_bytes=$((64 * 1024 * 1024))       # align to 64 MiB
@@ -848,17 +874,17 @@ create_image() {
 
     # NetworkManager refuses non-root-owned device plugins; fix ownership in
     # source rootfs before packing the final image.
-    sudo find "${OUT_DIR}/rootfs/usr/lib" -type f -path '*/NetworkManager/*/libnm-*.so' \
+    ${SUDO_CMD}find "${OUT_DIR}/rootfs/usr/lib" -type f -path '*/NetworkManager/*/libnm-*.so' \
         -exec chown root:root {} + 2>/dev/null || true
 
     # Ensure chassis is tablet so Phosh doesn't force portrait on lock/sleep (issue #7)
     if [ -d "${OUT_DIR}/rootfs/etc" ]; then
         if ! grep -q "CHASSIS=tablet" "${OUT_DIR}/rootfs/etc/machine-info" 2>/dev/null; then
-            echo "CHASSIS=tablet" | sudo tee -a "${OUT_DIR}/rootfs/etc/machine-info" >/dev/null
+            echo "CHASSIS=tablet" | ${SUDO_CMD}tee -a "${OUT_DIR}/rootfs/etc/machine-info" >/dev/null
         fi
     fi
 
-    sudo mkfs.ext4 -F \
+    ${SUDO_CMD}mkfs.ext4 -F \
         -L rootfs \
         -U c0ffee11-2233-4455-6677-8899aabbccdd \
         -d "${OUT_DIR}/rootfs" \
@@ -867,9 +893,9 @@ create_image() {
         "${OUT_DIR}/rootfs.ext4"
 
     # Keep a bit more usable free space on small images.
-    sudo tune2fs -m 1 "${OUT_DIR}/rootfs.ext4" >/dev/null 2>&1 || true
+    ${SUDO_CMD}tune2fs -m 1 "${OUT_DIR}/rootfs.ext4" >/dev/null 2>&1 || true
 
-    if ! sudo e2fsck -pf "${OUT_DIR}/rootfs.ext4"; then
+    if ! ${SUDO_CMD}e2fsck -pf "${OUT_DIR}/rootfs.ext4"; then
         echo "[-] Error: rootfs.ext4 consistency check failed."
         exit 1
     fi
@@ -880,7 +906,7 @@ create_image() {
     local empty_rootpath="${OUT_DIR}/empty_rootpath"
     rm -rf "${empty_rootpath}"
     mkdir -p "${empty_rootpath}"
-    sudo genimage \
+    ${SUDO_CMD}genimage \
         --config "${ROOT_DIR}/genimage.cfg" \
         --rootpath "${empty_rootpath}" \
         --tmppath "${OUT_DIR}/tmp" \

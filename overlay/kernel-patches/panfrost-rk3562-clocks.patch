@@ -1,0 +1,51 @@
+diff --git a/drivers/gpu/drm/panfrost/panfrost_device.c b/drivers/gpu/drm/panfrost/panfrost_device.c
+index ee612303f..bed53984f 100644
+--- a/drivers/gpu/drm/panfrost/panfrost_device.c
++++ b/drivers/gpu/drm/panfrost/panfrost_device.c
+@@ -68,8 +68,24 @@ static int panfrost_clk_init(struct panfrost_device *pfdev)
+ 			goto disable_clock;
+ 	}
+ 
++	/* Grab any remaining clocks (e.g. Rockchip RK3562 GPU bus/bridge clocks) */
++	err = devm_clk_bulk_get_all(pfdev->dev, &pfdev->extra_clocks);
++	if (err > 0) {
++		pfdev->num_extra_clocks = err;
++		err = clk_bulk_prepare_enable(pfdev->num_extra_clocks, pfdev->extra_clocks);
++		if (err)
++			goto disable_bus_clock;
++	} else if (err < 0) {
++		dev_err(pfdev->dev, "get extra clocks failed %d\n", err);
++		goto disable_bus_clock;
++	} else {
++		pfdev->num_extra_clocks = 0;
++	}
++
+ 	return 0;
+ 
++disable_bus_clock:
++	clk_disable_unprepare(pfdev->bus_clock);
+ disable_clock:
+ 	clk_disable_unprepare(pfdev->clock);
+ 
+@@ -78,6 +94,8 @@ static int panfrost_clk_init(struct panfrost_device *pfdev)
+ 
+ static void panfrost_clk_fini(struct panfrost_device *pfdev)
+ {
++	if (pfdev->num_extra_clocks > 0)
++		clk_bulk_disable_unprepare(pfdev->num_extra_clocks, pfdev->extra_clocks);
+ 	clk_disable_unprepare(pfdev->bus_clock);
+ 	clk_disable_unprepare(pfdev->clock);
+ }
+diff --git a/drivers/gpu/drm/panfrost/panfrost_device.h b/drivers/gpu/drm/panfrost/panfrost_device.h
+index 8b25278f3..eae40dcb4 100644
+--- a/drivers/gpu/drm/panfrost/panfrost_device.h
++++ b/drivers/gpu/drm/panfrost/panfrost_device.h
+@@ -84,6 +84,8 @@ struct panfrost_device {
+ 	void __iomem *iomem;
+ 	struct clk *clock;
+ 	struct clk *bus_clock;
++	struct clk_bulk_data *extra_clocks;
++	int num_extra_clocks;
+ 	struct regulator_bulk_data *regulators;
+ 	struct reset_control *rstc;
+ 	/* pm_domains for devices with more than one. */
