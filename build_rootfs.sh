@@ -1103,6 +1103,63 @@ chroot "${ROOTFS_MNT}" plymouth-set-default-theme rkdebian 2>/dev/null || \
 echo "[*] Adding Chromium acceleration flags..."
 mkdir -p "${ROOTFS_MNT}/etc/chromium.d"
 if [ "${FF_VAAPI_ENABLED}" = "true" ]; then
+    mkdir -p "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1"
+    cat > "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1/manifest.json" << 'BLOCK_AV1_MANIFEST'
+{
+  "name": "Block AV1 for Hardware VP9",
+  "version": "1.0",
+  "manifest_version": 3,
+  "description": "Blocks software AV1 decode so hardware VP9 is used",
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["block_av1.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ]
+}
+BLOCK_AV1_MANIFEST
+    cat > "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1/block_av1.js" << 'BLOCK_AV1_JS'
+(function() {
+  if (window.MediaSource && window.MediaSource.isTypeSupported) {
+    var origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
+    window.MediaSource.isTypeSupported = function(type) {
+      if (typeof type === 'string' && (type.toLowerCase().includes('av01') || type.toLowerCase().includes('av1'))) {
+        return false;
+      }
+      return origIsTypeSupported(type);
+    };
+  }
+  if (window.HTMLMediaElement && window.HTMLMediaElement.prototype.canPlayType) {
+    var origCanPlayType = window.HTMLMediaElement.prototype.canPlayType;
+    window.HTMLMediaElement.prototype.canPlayType = function(type) {
+      if (typeof type === 'string' && (type.toLowerCase().includes('av01') || type.toLowerCase().includes('av1'))) {
+        return '';
+      }
+      return origCanPlayType.apply(this, arguments);
+    };
+  }
+  if (navigator.mediaCapabilities && navigator.mediaCapabilities.decodingInfo) {
+    var origDecodingInfo = navigator.mediaCapabilities.decodingInfo.bind(navigator.mediaCapabilities);
+    navigator.mediaCapabilities.decodingInfo = function(config) {
+      if (config && config.video && config.video.contentType) {
+        var ct = config.video.contentType.toLowerCase();
+        if (ct.includes('av01') || ct.includes('av1')) {
+          return Promise.resolve({
+            supported: false,
+            smooth: false,
+            powerEfficient: false
+          });
+        }
+      }
+      return origDecodingInfo(config);
+    };
+  }
+})();
+BLOCK_AV1_JS
+    chmod -R 755 "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1"
+
     cat > "${ROOTFS_MNT}/etc/chromium.d/rk3562-hw-accel" << 'CHROMIUM_HW_FLAGS'
 # RK3562 hardware acceleration — sourced by /usr/bin/chromium wrapper
 export LIBVA_DRIVER_NAME=rockchip
@@ -1121,6 +1178,7 @@ CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-encode"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiVideoEncoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,UseOzonePlatform,WebRtcPipeWireCamera"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder,Vulkan"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --load-extension=/usr/share/chromium/extensions/block-av1"
 CHROMIUM_HW_FLAGS
 else
     # No rockchip VAAPI driver — GPU compositing only, software video decode.
