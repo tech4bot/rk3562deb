@@ -198,7 +198,7 @@ apt-get -f install -y || \
     echo "[!] Warning: apt dependency repair failed; continuing with base package install."
 apt-get install -y sudo curl wget nano vim openssh-server network-manager wpasupplicant iw wireless-tools \
     network-manager-gnome bluez blueman \
-    xorg xserver-xorg xserver-xorg-input-libinput firefox-esr mesa-utils libgl1-mesa-dri mesa-vulkan-drivers mesa-opencl-icd vulkan-tools \
+    xorg xserver-xorg xserver-xorg-input-libinput mesa-utils libgl1-mesa-dri mesa-vulkan-drivers mesa-opencl-icd vulkan-tools \
     pipewire pipewire-audio pipewire-alsa pipewire-pulse wireplumber pavucontrol alsa-utils libasound2-plugins \
     pipewire-libcamera libcamera-ipa libcamera-v4l2 \
     gedit \
@@ -483,12 +483,8 @@ else
     printf '\n[Policy]\nAutoEnable=true\n' >> /etc/bluetooth/main.conf
 fi
 
-# Firefox launcher defaults for RK3562: prefer native Wayland + VAAPI and
-# neutralize stale MOZ_X11_EGL values inherited from login environments.
-if [ -f /usr/share/applications/firefox-esr.desktop ]; then
-    sed -i -E 's|^Exec=.*firefox-esr.*$|Exec=env -u MOZ_X11_EGL MOZ_DISABLE_RDD_SANDBOX=1 MOZ_ENABLE_WAYLAND=1 MOZ_WAYLAND_USE_VAAPI=1 MOZ_DRM_DEVICE=/dev/dri/renderD128 LIBVA_DRIVER_NAME=rockchip /usr/lib/firefox-esr/firefox-esr %u|' \
-        /usr/share/applications/firefox-esr.desktop || true
-fi
+# Ensure no stale Firefox launcher remains
+rm -f /usr/share/applications/firefox-esr.desktop 2>/dev/null || true
 
 # Configure a simple boot splash theme.
 if command -v plymouth-set-default-theme >/dev/null 2>&1; then
@@ -1041,54 +1037,12 @@ else
 fi
 rm -f "${ROOTFS_MNT}/tmp/build_vaapi.sh"
 
-echo "[*] Adding Firefox acceleration defaults..."
-mkdir -p "${ROOTFS_MNT}/usr/lib/firefox-esr/defaults/pref"
-FF_VAAPI_ENABLED="false"
-if [ -f "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so" ]; then
-    FF_VAAPI_ENABLED="true"
-    cat > "${ROOTFS_MNT}/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" << 'FIREFOX_PREFS_HW'
-pref("gfx.webrender.all", true);
-pref("media.hardware-video-decoding.enabled", true);
-pref("media.hardware-video-decoding.force-enabled", true);
-pref("media.ffmpeg.vaapi.enabled", true);
-pref("media.ffmpeg.dmabuf-textures.enabled", true);
-pref("media.rdd-ffmpeg.enabled", true);
-pref("media.ffvpx.enabled", true);
-pref("media.webm.enabled", true);
-pref("media.mediasource.webm.enabled", true);
-pref("media.mediasource.vp9.enabled", true);
-pref("media.av1.enabled", false);
-pref("media.mediasource.av1.enabled", false);
-FIREFOX_PREFS_HW
-else
-    echo "[!] Warning: rockchip_drv_video.so missing; using Firefox software-video fallback profile."
-    cat > "${ROOTFS_MNT}/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" << 'FIREFOX_PREFS_SW'
-pref("media.hardware-video-decoding.enabled", false);
-pref("media.hardware-video-decoding.force-enabled", false);
-pref("media.ffmpeg.vaapi.enabled", false);
-pref("media.ffmpeg.dmabuf-textures.enabled", false);
-pref("media.rdd-ffmpeg.enabled", true);
-pref("media.ffvpx.enabled", false);
-pref("media.mediasource.enabled", false);
-pref("media.webm.enabled", false);
-pref("media.mediasource.webm.enabled", false);
-pref("media.av1.enabled", false);
-pref("media.mediasource.av1.enabled", false);
-pref("media.mediasource.vp9.enabled", false);
-FIREFOX_PREFS_SW
-fi
-
-# Keep Firefox and VA-API environment deterministic across rebuilds.
+# Keep VA-API environment deterministic across rebuilds.
 touch "${ROOTFS_MNT}/etc/environment"
-sed -i '/^MOZ_DISABLE_RDD_SANDBOX=/d;/^MOZ_X11_EGL=/d;/^MOZ_WEBRENDER=/d;/^MOZ_ENABLE_WAYLAND=/d;/^LIBVA_DRIVER_NAME=/d;/^LIBVA_DRIVERS_PATH=/d' \
+sed -i '/^MOZ_/d;/^LIBVA_DRIVER_NAME=/d;/^LIBVA_DRIVERS_PATH=/d' \
     "${ROOTFS_MNT}/etc/environment" || true
-echo "MOZ_DISABLE_RDD_SANDBOX=1" >> "${ROOTFS_MNT}/etc/environment"
-echo "MOZ_ENABLE_WAYLAND=1" >> "${ROOTFS_MNT}/etc/environment"
 echo "LIBVA_DRIVER_NAME=rockchip" >> "${ROOTFS_MNT}/etc/environment"
 echo "LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri" >> "${ROOTFS_MNT}/etc/environment"
-
-# Remove any stale h264ify policy so YouTube can stream native VP9
-rm -f "${ROOTFS_MNT}/usr/lib/firefox-esr/distribution/policies.json"
 
 # Install custom Plymouth boot splash theme.
 echo "[*] Installing custom Plymouth boot splash..."
@@ -2529,22 +2483,6 @@ exec chromium "${args[@]}"
 CHROMIUM_PWCAM
 chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/chromium-pwcam"
 
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/firefox-pwcam" << 'FIREFOX_PWCAM'
-#!/bin/sh
-set -eu
-exec env -u MOZ_X11_EGL \
-  MOZ_DISABLE_RDD_SANDBOX=1 \
-  MOZ_ENABLE_WAYLAND=1 \
-  MOZ_WAYLAND_USE_VAAPI=1 \
-  MOZ_DRM_DEVICE=/dev/dri/renderD128 \
-  LIBVA_DRIVER_NAME=rockchip \
-  /usr/lib/firefox-esr/firefox-esr \
-  --setpref media.webrtc.capture.allow-pipewire=true \
-  --setpref media.webrtc.camera.allow-pipewire=true \
-  "$@"
-FIREFOX_PWCAM
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/firefox-pwcam"
-
 if [ -f "${ROOTFS_MNT}/usr/share/applications/chromium.desktop" ]; then
     cp -f "${ROOTFS_MNT}/usr/share/applications/chromium.desktop" \
           "${ROOTFS_MNT}/home/chaos/.local/share/applications/chromium.desktop"
@@ -2552,16 +2490,22 @@ if [ -f "${ROOTFS_MNT}/usr/share/applications/chromium.desktop" ]; then
           "${ROOTFS_MNT}/home/chaos/.local/share/applications/chromium.desktop"
 fi
 
-if [ -f "${ROOTFS_MNT}/usr/share/applications/firefox-esr.desktop" ]; then
-    cp -f "${ROOTFS_MNT}/usr/share/applications/firefox-esr.desktop" \
-          "${ROOTFS_MNT}/home/chaos/.local/share/applications/firefox-esr.desktop"
-    sed -i 's|^Exec=.*|Exec=/home/chaos/.local/bin/firefox-pwcam %u|' \
-          "${ROOTFS_MNT}/home/chaos/.local/share/applications/firefox-esr.desktop"
-fi
+# Ensure Chromium is registered as default web browser
+mkdir -p "${ROOTFS_MNT}/etc/xdg"
+cat > "${ROOTFS_MNT}/etc/xdg/mimeapps.list" << 'EOF_MIME'
+[Default Applications]
+text/html=chromium.desktop
+x-scheme-handler/http=chromium.desktop
+x-scheme-handler/https=chromium.desktop
+x-scheme-handler/about=chromium.desktop
+x-scheme-handler/unknown=chromium.desktop
+EOF_MIME
+
+rm -f "${ROOTFS_MNT}/home/chaos/.local/bin/firefox-pwcam" \
+      "${ROOTFS_MNT}/home/chaos/.local/share/applications/firefox-esr.desktop" 2>/dev/null || true
 
 chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
     /home/chaos/.local/bin/chromium-pwcam \
-    /home/chaos/.local/bin/firefox-pwcam \
     /home/chaos/.local/share/applications || true
 
 # Power key behavior is handled by rk-powerkey-longpress service:

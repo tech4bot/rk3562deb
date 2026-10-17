@@ -726,6 +726,28 @@ build_kernel() {
         scripts/config --enable LOGO_LINUX_CLUT224 || true
         # Enable binfmt_misc for transparent x86/x86_64 emulation (FEX-Emu / box64).
         scripts/config --enable BINFMT_MISC || true
+        # Enable container and networking support (Docker / K3s / containerd).
+        scripts/config --enable MEMCG || true
+        scripts/config --enable CGROUP_PIDS || true
+        scripts/config --enable BLK_CGROUP || true
+        scripts/config --enable POSIX_MQUEUE || true
+        scripts/config --enable OVERLAY_FS || true
+        scripts/config --enable VETH || true
+        scripts/config --enable BRIDGE || true
+        scripts/config --enable BRIDGE_NETFILTER || true
+        scripts/config --enable NETFILTER_XT_MATCH_ADDRTYPE || true
+        scripts/config --enable NETFILTER_XT_MATCH_CONNTRACK || true
+        scripts/config --enable NETFILTER_XT_MATCH_COMMENT || true
+        scripts/config --enable NETFILTER_XT_MATCH_IPVS || true
+        scripts/config --enable NETFILTER_XT_MARK || true
+        scripts/config --enable IP_NF_FILTER || true
+        scripts/config --enable IP_NF_NAT || true
+        scripts/config --enable NF_NAT || true
+        scripts/config --enable IP_NF_TARGET_MASQUERADE || true
+        scripts/config --enable IP_NF_TARGET_REDIRECT || true
+        scripts/config --enable IP6_NF_FILTER || true
+        scripts/config --enable IP6_NF_NAT || true
+        scripts/config --enable IP6_NF_TARGET_MASQUERADE || true
 
         if [ "${RKDEBIAN_GPU_STACK}" = "panfrost" ]; then
             echo "[*] Applying panfrost kernel config overrides..."
@@ -967,33 +989,14 @@ CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --load-extension=/usr/share/chromium/extension
 CHROMIUM_HW_SYNC
         fi
 
-        # Sync global VA-API and Wayland environment defaults
+        # Sync global VA-API environment defaults
         if [ -f "${OUT_DIR}/rootfs/etc/environment" ]; then
-            for env_var in "MOZ_DISABLE_RDD_SANDBOX=1" "MOZ_ENABLE_WAYLAND=1" "LIBVA_DRIVER_NAME=rockchip" "LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri"; do
+            for env_var in "LIBVA_DRIVER_NAME=rockchip" "LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri"; do
                 var_key="${env_var%%=*}"
                 if ! grep -q "^${var_key}=" "${OUT_DIR}/rootfs/etc/environment" 2>/dev/null; then
                     echo "${env_var}" | ${SUDO_CMD}tee -a "${OUT_DIR}/rootfs/etc/environment" >/dev/null
                 fi
             done
-        fi
-
-        # Sync Firefox hardware acceleration and VP9 preferences
-        if [ -d "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref" ]; then
-            cat << 'FIREFOX_PREFS_SYNC' | ${SUDO_CMD}tee "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" >/dev/null
-pref("gfx.webrender.all", true);
-pref("media.hardware-video-decoding.enabled", true);
-pref("media.hardware-video-decoding.force-enabled", true);
-pref("media.ffmpeg.vaapi.enabled", true);
-pref("media.ffmpeg.dmabuf-textures.enabled", true);
-pref("media.rdd-ffmpeg.enabled", true);
-pref("media.ffvpx.enabled", true);
-pref("media.webm.enabled", true);
-pref("media.mediasource.webm.enabled", true);
-pref("media.mediasource.vp9.enabled", true);
-pref("media.av1.enabled", false);
-pref("media.mediasource.av1.enabled", false);
-FIREFOX_PREFS_SYNC
-            ${SUDO_CMD}rm -f "${OUT_DIR}/rootfs/usr/lib/firefox-esr/distribution/policies.json"
         fi
     fi
 
