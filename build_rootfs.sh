@@ -873,6 +873,100 @@ echo "[*] Building rockchip_drv_video.so (woodyst/rockchip-vaapi)..."
 rm -rf /tmp/rockchip-vaapi
 git clone --depth=1 https://github.com/woodyst/rockchip-vaapi /tmp/rockchip-vaapi
 cd /tmp/rockchip-vaapi
+git apply << 'VAAPI_CHROMIUM_PATCH'
+diff --git a/src/rockchip_drv_video.c b/src/rockchip_drv_video.c
+index 08a31c6..d131b7c 100644
+--- a/src/rockchip_drv_video.c
++++ b/src/rockchip_drv_video.c
+@@ -208,7 +208,11 @@ static VAStatus rk_Terminate(VADriverContextP ctx) {
+     }
+     for (int i = 0; i < MAX_CONTEXTS; i++) {
+         if (!d->contexts[i].used) continue;
+-        if (d->contexts[i].mpp) mpp_destroy(d->contexts[i].mpp);
++        if (d->contexts[i].mpp) {
++            if (d->contexts[i].mpi && d->contexts[i].mpi->reset)
++                d->contexts[i].mpi->reset(d->contexts[i].mpp);
++            mpp_destroy(d->contexts[i].mpp);
++        }
+     }
+     for (int i = 0; i < MAX_BUFFERS; i++) {
+         if (d->buffers[i].used) free(d->buffers[i].data);
+@@ -320,10 +324,21 @@ static VAStatus rk_QueryConfigAttributes(VADriverContextP ctx,
+     RKDriver *d = drv_from_ctx(ctx);
+     RKConfig *c = config_by_id(d, id);
+     if (!c) return VA_STATUS_ERROR_INVALID_CONFIG;
+-    (void)attribs;
+     *profile = c->profile;
+     *entrypoint = c->entrypoint;
+-    *n = 0;
++
++    int i = 0;
++    attribs[i].type = VAConfigAttribRTFormat;
++    attribs[i].value = VA_RT_FORMAT_YUV420 | VA_RT_FORMAT_YUV420_10;
++    i++;
++
++    attribs[i].type = VAConfigAttribDecSliceMode;
++    attribs[i].value = VA_DEC_SLICE_MODE_NORMAL;
++    i++;
++
++    *n = i;
++    LOG("QueryConfigAttributes: config=0x%x profile=%d entrypoint=%d returning %d attribs",
++        id, *profile, *entrypoint, *n);
+     return VA_STATUS_SUCCESS;
+ }
+ 
+@@ -514,7 +529,10 @@ static VAStatus rk_DestroyContext(VADriverContextP ctx, VAContextID id) {
+     RKDriver *d = drv_from_ctx(ctx);
+     RKContext *c = context_by_id(d, id);
+     if (!c) return VA_STATUS_ERROR_INVALID_CONTEXT;
+-    if (c->mpp) mpp_destroy(c->mpp);
++    if (c->mpp) {
++        if (c->mpi && c->mpi->reset) c->mpi->reset(c->mpp);
++        mpp_destroy(c->mpp);
++    }
+     memset(c, 0, sizeof(*c));
+     return VA_STATUS_SUCCESS;
+ }
+@@ -1444,8 +1462,8 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
+     LOG("QuerySurfaceAttributes: config=0x%x list=%s",
+         config, attrib_list ? "provided" : "NULL (query count)");
+ 
+-    /* Firefox calls this twice: first with NULL to get count, then with buffer */
+-    const unsigned int n = 4;
++    /* Callers query twice: first with NULL to get count, then with buffer */
++    const unsigned int n = 7;
+     if (!attrib_list) {
+         *num_attribs = n;
+         return VA_STATUS_SUCCESS;
+@@ -1479,10 +1497,26 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
+     attrib_list[3].type              = VASurfaceAttribMaxWidth;
+     attrib_list[3].flags             = VA_SURFACE_ATTRIB_GETTABLE;
+     attrib_list[3].value.type        = VAGenericValueTypeInteger;
+-    attrib_list[3].value.value.i     = 7680;
++    attrib_list[3].value.value.i     = 4096;
++
++    attrib_list[4].type              = VASurfaceAttribMaxHeight;
++    attrib_list[4].flags             = VA_SURFACE_ATTRIB_GETTABLE;
++    attrib_list[4].value.type        = VAGenericValueTypeInteger;
++    attrib_list[4].value.value.i     = 4096;
++
++    /* Min resolution */
++    attrib_list[5].type              = VASurfaceAttribMinWidth;
++    attrib_list[5].flags             = VA_SURFACE_ATTRIB_GETTABLE;
++    attrib_list[5].value.type        = VAGenericValueTypeInteger;
++    attrib_list[5].value.value.i     = 16;
++
++    attrib_list[6].type              = VASurfaceAttribMinHeight;
++    attrib_list[6].flags             = VA_SURFACE_ATTRIB_GETTABLE;
++    attrib_list[6].value.type        = VAGenericValueTypeInteger;
++    attrib_list[6].value.value.i     = 16;
+ 
+     *num_attribs = n;
+-    LOG("QuerySurfaceAttributes: returned %u attribs (NV12, P010, DRM_PRIME_2)", n);
++    LOG("QuerySurfaceAttributes: returned %u attribs (NV12, P010, DRM_PRIME_2, 4096x4096)", n);
+     return VA_STATUS_SUCCESS;
+ }
+VAAPI_CHROMIUM_PATCH
 make
 mkdir -p /usr/lib/aarch64-linux-gnu/dri
 cp rockchip_drv_video.so /usr/lib/aarch64-linux-gnu/dri/
@@ -1014,6 +1108,8 @@ if [ "${FF_VAAPI_ENABLED}" = "true" ]; then
 export LIBVA_DRIVER_NAME=rockchip
 export LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ozone-platform=wayland"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --render-node-override=/dev/dri/renderD128"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --hardware-video-device-path=/dev/dri/renderD128"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-vulkan"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-rasterization"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-compositing"
@@ -1024,7 +1120,7 @@ CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ignore-gpu-blocklist"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-encode"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiVideoEncoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,UseOzonePlatform,WebRtcPipeWireCamera"
-CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder,Vulkan"
 CHROMIUM_HW_FLAGS
 else
     # No rockchip VAAPI driver — GPU compositing only, software video decode.
