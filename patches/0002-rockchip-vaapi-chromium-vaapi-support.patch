@@ -1,5 +1,5 @@
 diff --git a/src/rockchip_drv_video.c b/src/rockchip_drv_video.c
-index 08a31c6..d131b7c 100644
+index 08a31c6..22ac1a9 100644
 --- a/src/rockchip_drv_video.c
 +++ b/src/rockchip_drv_video.c
 @@ -208,7 +208,11 @@ static VAStatus rk_Terminate(VADriverContextP ctx) {
@@ -39,7 +39,19 @@ index 08a31c6..d131b7c 100644
      return VA_STATUS_SUCCESS;
  }
  
-@@ -514,7 +529,10 @@ static VAStatus rk_DestroyContext(VADriverContextP ctx, VAContextID id) {
+@@ -378,6 +393,11 @@ static VAStatus rk_CreateSurfaces(VADriverContextP ctx,
+                     surf->prime_fd   = dup_fd;
+                     surf->hstride    = (int)hs;
+                     surf->vstride    = (int)vs;
++                    void *pbuf = mpp_buffer_get_ptr(buf);
++                    if (pbuf) {
++                        memset(pbuf, 0, (size_t)hs * vs);
++                        memset((uint8_t *)pbuf + (size_t)hs * vs, 0x80, (size_t)hs * vs);
++                    }
+                     LOG("CreateSurfaces: surface %ux%u placeholder prime_fd=%d",
+                         (unsigned)width, (unsigned)height, surf->prime_fd);
+                 } else {
+@@ -514,7 +534,10 @@ static VAStatus rk_DestroyContext(VADriverContextP ctx, VAContextID id) {
      RKDriver *d = drv_from_ctx(ctx);
      RKContext *c = context_by_id(d, id);
      if (!c) return VA_STATUS_ERROR_INVALID_CONTEXT;
@@ -51,7 +63,48 @@ index 08a31c6..d131b7c 100644
      memset(c, 0, sizeof(*c));
      return VA_STATUS_SUCCESS;
  }
-@@ -1444,8 +1462,8 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
+@@ -676,6 +699,8 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
+     int  copy_h = fheight > 0 ? fheight : s->height;
+     int  src_hs = fhs > 0 ? fhs : copy_w;
+     int  src_vs = fvs > 0 ? fvs : copy_h;
++    int  dst_hs = s->hstride ? s->hstride : copy_w;
++    int  dst_vs = s->vstride ? s->vstride : copy_h;
+     bool i10    = MPP_FRAME_FMT_IS_YUV_10BIT(ffmt);
+     int  bpp    = i10 ? 2 : 1;
+     int  copied = 0;
+@@ -684,16 +709,17 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
+     if (src && dst) {
+         const uint8_t *sy = (const uint8_t *)src;
+         uint8_t       *dy = (uint8_t       *)dst;
++        size_t line_bytes = (size_t)copy_w * bpp;
+         for (int r = 0; r < copy_h; r++)
+-            memcpy(dy + (size_t)r * src_hs * bpp,
++            memcpy(dy + (size_t)r * dst_hs * bpp,
+                    sy + (size_t)r * src_hs * bpp,
+-                   (size_t)src_hs * bpp);
++                   line_bytes);
+         const uint8_t *su = sy + (size_t)src_hs * src_vs * bpp;
+-        uint8_t       *du = dy + (size_t)src_hs * src_vs * bpp;
++        uint8_t       *du = dy + (size_t)dst_hs * dst_vs * bpp;
+         for (int r = 0; r < copy_h / 2; r++)
+-            memcpy(du + (size_t)r * src_hs * bpp,
++            memcpy(du + (size_t)r * dst_hs * bpp,
+                    su + (size_t)r * src_hs * bpp,
+-                   (size_t)src_hs * bpp);
++                   line_bytes);
+         copied = 1;
+     }
+     mpp_frame_deinit(&frame);
+@@ -703,8 +729,6 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
+     s->fmt    = ffmt;
+     if (fwidth  > 0) s->width   = fwidth;
+     if (fheight > 0) s->height  = fheight;
+-    if (fhs     > 0) s->hstride = fhs;
+-    if (fvs     > 0) s->vstride = fvs;
+     s->decoded  = true;
+     pthread_cond_signal(&s->cond);
+     pthread_mutex_unlock(&s->lock);
+@@ -1444,8 +1468,8 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
      LOG("QuerySurfaceAttributes: config=0x%x list=%s",
          config, attrib_list ? "provided" : "NULL (query count)");
  
@@ -62,7 +115,7 @@ index 08a31c6..d131b7c 100644
      if (!attrib_list) {
          *num_attribs = n;
          return VA_STATUS_SUCCESS;
-@@ -1479,10 +1497,26 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
+@@ -1479,10 +1503,26 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
      attrib_list[3].type              = VASurfaceAttribMaxWidth;
      attrib_list[3].flags             = VA_SURFACE_ATTRIB_GETTABLE;
      attrib_list[3].value.type        = VAGenericValueTypeInteger;
