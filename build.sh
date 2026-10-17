@@ -882,6 +882,45 @@ create_image() {
         if ! grep -q "CHASSIS=tablet" "${OUT_DIR}/rootfs/etc/machine-info" 2>/dev/null; then
             echo "CHASSIS=tablet" | ${SUDO_CMD}tee -a "${OUT_DIR}/rootfs/etc/machine-info" >/dev/null
         fi
+
+        # Sync Chromium hardware acceleration flags if VA-API driver is present
+        if [ -f "${OUT_DIR}/rootfs/usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so" ]; then
+            ${SUDO_CMD}mkdir -p "${OUT_DIR}/rootfs/etc/chromium.d"
+            cat << 'CHROMIUM_HW_SYNC' | ${SUDO_CMD}tee "${OUT_DIR}/rootfs/etc/chromium.d/rk3562-hw-accel" >/dev/null
+# RK3562 hardware acceleration — sourced by /usr/bin/chromium wrapper
+export LIBVA_DRIVER_NAME=rockchip
+export LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ozone-platform=wayland"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-vulkan"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-rasterization"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-compositing"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --password-store=basic"
+
+# Enable VA-API Hardware Video Decode & Encode
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ignore-gpu-blocklist"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-encode"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiVideoEncoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,UseOzonePlatform,WebRtcPipeWireCamera"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder"
+CHROMIUM_HW_SYNC
+        fi
+
+        # Sync global VA-API and Wayland environment defaults
+        if [ -f "${OUT_DIR}/rootfs/etc/environment" ]; then
+            for env_var in "MOZ_DISABLE_RDD_SANDBOX=1" "MOZ_ENABLE_WAYLAND=1" "LIBVA_DRIVER_NAME=rockchip" "LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri"; do
+                var_key="${env_var%%=*}"
+                if ! grep -q "^${var_key}=" "${OUT_DIR}/rootfs/etc/environment" 2>/dev/null; then
+                    echo "${env_var}" | ${SUDO_CMD}tee -a "${OUT_DIR}/rootfs/etc/environment" >/dev/null
+                fi
+            done
+        fi
+
+        # Sync Firefox WebRender GPU acceleration
+        if [ -f "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" ]; then
+            if ! grep -q "gfx.webrender.all" "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" 2>/dev/null; then
+                echo 'pref("gfx.webrender.all", true);' | ${SUDO_CMD}tee -a "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" >/dev/null
+            fi
+        fi
     fi
 
     ${SUDO_CMD}mkfs.ext4 -F \

@@ -933,6 +933,7 @@ FF_VAAPI_ENABLED="false"
 if [ -f "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so" ]; then
     FF_VAAPI_ENABLED="true"
     cat > "${ROOTFS_MNT}/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" << 'FIREFOX_PREFS_HW'
+pref("gfx.webrender.all", true);
 pref("media.hardware-video-decoding.enabled", true);
 pref("media.hardware-video-decoding.force-enabled", true);
 pref("media.ffmpeg.vaapi.enabled", true);
@@ -963,11 +964,14 @@ pref("media.mediasource.vp9.enabled", false);
 FIREFOX_PREFS_SW
 fi
 
-# Keep Firefox environment deterministic across rebuilds.
+# Keep Firefox and VA-API environment deterministic across rebuilds.
 touch "${ROOTFS_MNT}/etc/environment"
-sed -i '/^MOZ_DISABLE_RDD_SANDBOX=/d;/^MOZ_X11_EGL=/d;/^MOZ_WEBRENDER=/d' \
+sed -i '/^MOZ_DISABLE_RDD_SANDBOX=/d;/^MOZ_X11_EGL=/d;/^MOZ_WEBRENDER=/d;/^MOZ_ENABLE_WAYLAND=/d;/^LIBVA_DRIVER_NAME=/d;/^LIBVA_DRIVERS_PATH=/d' \
     "${ROOTFS_MNT}/etc/environment" || true
 echo "MOZ_DISABLE_RDD_SANDBOX=1" >> "${ROOTFS_MNT}/etc/environment"
+echo "MOZ_ENABLE_WAYLAND=1" >> "${ROOTFS_MNT}/etc/environment"
+echo "LIBVA_DRIVER_NAME=rockchip" >> "${ROOTFS_MNT}/etc/environment"
+echo "LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri" >> "${ROOTFS_MNT}/etc/environment"
 
 # Auto-install h264ify on first Firefox run to keep YouTube on H.264 streams.
 mkdir -p "${ROOTFS_MNT}/usr/lib/firefox-esr/distribution"
@@ -1051,29 +1055,20 @@ mkdir -p "${ROOTFS_MNT}/etc/chromium.d"
 if [ "${FF_VAAPI_ENABLED}" = "true" ]; then
     cat > "${ROOTFS_MNT}/etc/chromium.d/rk3562-hw-accel" << 'CHROMIUM_HW_FLAGS'
 # RK3562 hardware acceleration — sourced by /usr/bin/chromium wrapper
-# Let Chromium select its default GL backend for this build.
-# On Debian Chromium arm64, forcing --use-gl=egl can trigger GPU init fallback.
-# rockchip VAAPI decode is available but has been unstable on YouTube with
-# newer Chromium builds; default to software decode for reliability.
 export LIBVA_DRIVER_NAME=rockchip
 export LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ozone-platform=wayland"
-# Chromium 146 on RK3562 + Wayland can auto-pick Vulkan and fail window
-# startup; force non-Vulkan rendering for reliable launch.
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-vulkan"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-rasterization"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-gpu-compositing"
-# Avoid GNOME keyring first-launch password prompt on autologin images.
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --password-store=basic"
-CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-accelerated-video-decode"
-CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,UseChromeOSDirectVideoDecoder"
-# Optional (faster but less stable on some images): enable VAAPI decode
-# CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
-# CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
-# CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder"
-# ── FALLBACK: if Chromium regresses, force ANGLE explicitly: ──
-# CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --use-gl=angle"
-# CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --use-angle=opengles"
+
+# Enable VA-API Hardware Video Decode & Encode
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ignore-gpu-blocklist"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-encode"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiVideoEncoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,UseOzonePlatform,WebRtcPipeWireCamera"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder"
 CHROMIUM_HW_FLAGS
 else
     # No rockchip VAAPI driver — GPU compositing only, software video decode.
@@ -2367,10 +2362,7 @@ for arg in "$@"; do
   args+=("$arg")
 done
 
-exec chromium \
-  --ozone-platform-hint=auto \
-  --enable-features=UseOzonePlatform,WebRtcPipeWireCamera \
-  "${args[@]}"
+exec chromium "${args[@]}"
 CHROMIUM_PWCAM
 chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/chromium-pwcam"
 
