@@ -25,7 +25,7 @@ RKDEBIAN_CPU_GOVERNOR="${RKDEBIAN_CPU_GOVERNOR:-performance}"
 RKDEBIAN_GPU_STACK="${RKDEBIAN_GPU_STACK:-panfrost}"
 RKDEBIAN_UI_SESSION="${RKDEBIAN_UI_SESSION:-phosh}"
 RKDEBIAN_MALI_GBM_PROVIDER="${RKDEBIAN_MALI_GBM_PROVIDER:-vendor}"
-RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE:-1}"
+RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE:-0}"
 RKDEBIAN_MINIMIZE_IMAGE="${RKDEBIAN_MINIMIZE_IMAGE:-0}"
 
 case "${RKDEBIAN_DISPLAY_SERVER}" in
@@ -329,7 +329,7 @@ if command -v flatpak >/dev/null 2>&1; then
             echo "[!] Warning: failed to add Flathub remote."
 
     # Keep heavy Flatpak apps optional to avoid inflating default image size.
-    RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE:-1}"
+    RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE:-0}"
     freetube_ref="io.freetubeapp.FreeTube"
     if [ "${RKDEBIAN_PREINSTALL_FREETUBE}" = "1" ]; then
         if flatpak remote-info --system flathub "${freetube_ref}" >/dev/null 2>&1; then
