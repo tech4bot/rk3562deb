@@ -724,6 +724,8 @@ build_kernel() {
         scripts/config --enable FRAMEBUFFER_CONSOLE || true
         scripts/config --enable LOGO || true
         scripts/config --enable LOGO_LINUX_CLUT224 || true
+        # Enable binfmt_misc for transparent x86/x86_64 emulation (FEX-Emu / box64).
+        scripts/config --enable BINFMT_MISC || true
 
         if [ "${RKDEBIAN_GPU_STACK}" = "panfrost" ]; then
             echo "[*] Applying panfrost kernel config overrides..."
