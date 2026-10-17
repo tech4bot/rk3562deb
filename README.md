@@ -66,8 +66,7 @@ The resulting image is written to an SD card. Insert it and power on — the tab
 
 | App | Notes |
 |-----|-------|
-| **Firefox ESR** | Preinstalled web browser |
-| **Chromium** | Preinstalled web browser (installed when available on mirror) |
+| **Chromium** | Hardware-accelerated browser with Rockchip VPU 1080p60 decode & camera support |
 | **FreeTube** | Installed via Flatpak from Flathub by default (disable with `RKDEBIAN_PREINSTALL_FREETUBE=0` for smaller images) |
 | **Drawing** | Touch-friendly paint app (installed when available on mirror) |
 | **Snapshot** | Camera app (installed when available on mirror) |
