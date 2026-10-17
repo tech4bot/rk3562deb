@@ -866,58 +866,25 @@ find /var/cache/man -type d -exec chmod 0755 {} + 2>/dev/null || true
 chmod g+s /var/cache/man 2>/dev/null || true
 find /var/cache/man -type f -exec chmod 0644 {} + 2>/dev/null || true
 
-apt-get install -y --no-install-recommends git build-essential libva-dev libdrm-dev pkg-config
+apt-get install -y --no-install-recommends git build-essential libva-dev librockchip-mpp-dev pkg-config
 
-# Install librga prebuilt + headers from airockchip/librga
-if [ ! -f /usr/lib/aarch64-linux-gnu/librga.so ]; then
-    echo "[*] Fetching librga..."
-    git clone --depth=1 https://github.com/airockchip/librga /tmp/librga_src
-    cp /tmp/librga_src/libs/Linux/gcc-aarch64/librga.so /usr/lib/aarch64-linux-gnu/
-    # Create SONAME symlink if the binary has one embedded
-    SONAME=$(objdump -p /usr/lib/aarch64-linux-gnu/librga.so 2>/dev/null | awk '/SONAME/{print $2}')
-    if [ -n "$SONAME" ] && [ "$SONAME" != "librga.so" ]; then
-        ln -sf librga.so "/usr/lib/aarch64-linux-gnu/$SONAME"
-    fi
-    mkdir -p /usr/include/rga
-    cp /tmp/librga_src/include/*.h /usr/include/rga/
-    ldconfig
-    rm -rf /tmp/librga_src
-fi
-
-# Build rk_hw_base middleware
-if [ ! -f /usr/lib/aarch64-linux-gnu/librk_hw_base.so ]; then
-    echo "[*] Building rk_hw_base..."
-    git clone --depth=1 https://github.com/sujit-168/rk_hw_base /tmp/rk_hw_base
-    cd /tmp/rk_hw_base
-    make CFLAGS="-I./include -I/usr/include/rockchip -I/usr/include/rga -fPIC -Wall -O2" \
-         LDFLAGS="-shared -L/usr/lib/aarch64-linux-gnu"
-    cp lib/librk_hw_base.so /usr/lib/aarch64-linux-gnu/
-    mkdir -p /usr/include/rk_hw_base
-    cp include/*.h /usr/include/rk_hw_base/
-    ldconfig
-    cd /tmp
-fi
-
-# Build rockchip VAAPI driver
-if [ ! -f /usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so ]; then
-    echo "[*] Building rockchip_drv_video.so..."
-    git clone --depth=1 https://github.com/sujit-168/rk_vaapi_driver /tmp/rk_vaapi_driver
-    # Ensure rk_hw_base sibling is present (may be missing on re-run if already installed)
-    [ -d /tmp/rk_hw_base ] || git clone --depth=1 https://github.com/sujit-168/rk_hw_base /tmp/rk_hw_base
-    cd /tmp/rk_vaapi_driver
-    make
-    mkdir -p /usr/lib/aarch64-linux-gnu/dri
-    cp lib/rockchip_drv_video.so /usr/lib/aarch64-linux-gnu/dri/
-    ldconfig
-    cd /tmp
-    rm -rf /tmp/rk_vaapi_driver /tmp/rk_hw_base
-fi
+# Build rockchip VAAPI driver (woodyst/rockchip-vaapi: H.264, HEVC, VP9 Profile 0/2 + zero-copy DRM PRIME)
+echo "[*] Building rockchip_drv_video.so (woodyst/rockchip-vaapi)..."
+rm -rf /tmp/rockchip-vaapi
+git clone --depth=1 https://github.com/woodyst/rockchip-vaapi /tmp/rockchip-vaapi
+cd /tmp/rockchip-vaapi
+make
+mkdir -p /usr/lib/aarch64-linux-gnu/dri
+cp rockchip_drv_video.so /usr/lib/aarch64-linux-gnu/dri/
+ldconfig
+cd /tmp
+rm -rf /tmp/rockchip-vaapi
 
 # Clean up build-only dependencies
-apt-get purge -y git build-essential libva-dev libdrm-dev pkg-config 2>/dev/null || true
+apt-get purge -y git build-essential libva-dev librockchip-mpp-dev pkg-config 2>/dev/null || true
 apt-get autoremove -y 2>/dev/null || true
 
-echo "[+] Rockchip VAAPI driver ready."
+echo "[+] Rockchip VAAPI driver ready (H.264, HEVC, VP9)."
 BUILD_VAAPI_EOF
 chmod +x "${ROOTFS_MNT}/tmp/build_vaapi.sh"
 if chroot "${ROOTFS_MNT}" /tmp/build_vaapi.sh; then
@@ -939,12 +906,12 @@ pref("media.hardware-video-decoding.force-enabled", true);
 pref("media.ffmpeg.vaapi.enabled", true);
 pref("media.ffmpeg.dmabuf-textures.enabled", true);
 pref("media.rdd-ffmpeg.enabled", true);
-pref("media.ffvpx.enabled", false);
-pref("media.webm.enabled", false);
-pref("media.mediasource.webm.enabled", false);
+pref("media.ffvpx.enabled", true);
+pref("media.webm.enabled", true);
+pref("media.mediasource.webm.enabled", true);
+pref("media.mediasource.vp9.enabled", true);
 pref("media.av1.enabled", false);
 pref("media.mediasource.av1.enabled", false);
-pref("media.mediasource.vp9.enabled", false);
 FIREFOX_PREFS_HW
 else
     echo "[!] Warning: rockchip_drv_video.so missing; using Firefox software-video fallback profile."
@@ -973,19 +940,8 @@ echo "MOZ_ENABLE_WAYLAND=1" >> "${ROOTFS_MNT}/etc/environment"
 echo "LIBVA_DRIVER_NAME=rockchip" >> "${ROOTFS_MNT}/etc/environment"
 echo "LIBVA_DRIVERS_PATH=/usr/lib/aarch64-linux-gnu/dri" >> "${ROOTFS_MNT}/etc/environment"
 
-# Auto-install h264ify on first Firefox run to keep YouTube on H.264 streams.
-mkdir -p "${ROOTFS_MNT}/usr/lib/firefox-esr/distribution"
-cat > "${ROOTFS_MNT}/usr/lib/firefox-esr/distribution/policies.json" << 'FIREFOX_POLICIES'
-{
-  "policies": {
-    "Extensions": {
-      "Install": [
-        "https://addons.mozilla.org/firefox/downloads/latest/h264ify/latest.xpi"
-      ]
-    }
-  }
-}
-FIREFOX_POLICIES
+# Remove any stale h264ify policy so YouTube can stream native VP9
+rm -f "${ROOTFS_MNT}/usr/lib/firefox-esr/distribution/policies.json"
 
 # Install custom Plymouth boot splash theme.
 echo "[*] Installing custom Plymouth boot splash..."

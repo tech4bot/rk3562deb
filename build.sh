@@ -915,11 +915,23 @@ CHROMIUM_HW_SYNC
             done
         fi
 
-        # Sync Firefox WebRender GPU acceleration
-        if [ -f "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" ]; then
-            if ! grep -q "gfx.webrender.all" "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" 2>/dev/null; then
-                echo 'pref("gfx.webrender.all", true);' | ${SUDO_CMD}tee -a "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" >/dev/null
-            fi
+        # Sync Firefox hardware acceleration and VP9 preferences
+        if [ -d "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref" ]; then
+            cat << 'FIREFOX_PREFS_SYNC' | ${SUDO_CMD}tee "${OUT_DIR}/rootfs/usr/lib/firefox-esr/defaults/pref/rk3562-gfx.js" >/dev/null
+pref("gfx.webrender.all", true);
+pref("media.hardware-video-decoding.enabled", true);
+pref("media.hardware-video-decoding.force-enabled", true);
+pref("media.ffmpeg.vaapi.enabled", true);
+pref("media.ffmpeg.dmabuf-textures.enabled", true);
+pref("media.rdd-ffmpeg.enabled", true);
+pref("media.ffvpx.enabled", true);
+pref("media.webm.enabled", true);
+pref("media.mediasource.webm.enabled", true);
+pref("media.mediasource.vp9.enabled", true);
+pref("media.av1.enabled", false);
+pref("media.mediasource.av1.enabled", false);
+FIREFOX_PREFS_SYNC
+            ${SUDO_CMD}rm -f "${OUT_DIR}/rootfs/usr/lib/firefox-esr/distribution/policies.json"
         fi
     fi
 
