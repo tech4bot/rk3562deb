@@ -444,11 +444,12 @@ auto lo
 iface lo inet loopback
 IFACES
 
-# Default Phosh WWAN backend away from ModemManager on non-cellular hardware.
+# Default Phosh WWAN backend and fast OSK bottom-bar toggle.
 mkdir -p /etc/dconf/db/local.d
 cat > /etc/dconf/db/local.d/20-rkdebian-phosh-wwan << 'PHOSH_WWAN_DCONF'
 [sm/puri/phosh]
 wwan-backend='ofono'
+osk-unfold-delay=0.5
 PHOSH_WWAN_DCONF
 
 # Keep lockscreen enabled by default with on-screen keyboard enabled.
@@ -2244,6 +2245,177 @@ fi
 
 # Remove stale keyboard launcher that points to Maliit binaries.
 rm -f "${ROOTFS_MNT}/home/chaos/Desktop/on-screen-keyboard.desktop"
+
+# Install custom Squeekboard layouts with down-arrow hide button.
+for kbd_dir in "${ROOTFS_MNT}/etc/skel/.local/share/squeekboard/keyboards" \
+               "${ROOTFS_MNT}/home/chaos/.local/share/squeekboard/keyboards"; do
+    mkdir -p "${kbd_dir}"
+    cat > "${kbd_dir}/us_wide.yaml" << 'SQUEEK_US_WIDE'
+# Language: English (US)
+---
+outlines:
+    default:       { width: 53.76,  height: 42 }
+    change-view:   { width: 80.64,  height: 42 }
+    change-view-2: { width: 94.08,  height: 42 }
+    large:         { width: 53.76,  height: 42 }
+    spaceline:     { width: 241.92, height: 42 }
+    special:       { width: 53.76,  height: 42 }
+    special-2:     { width: 80.64,  height: 42 }
+    special-3:     { width: 94.08,  height: 42 }
+
+views:
+    base:
+        - "q w e r t y u i o p"
+        - "a s d f g h j k l"
+        - "show_upper z x c v b n m BackSpace"
+        - "show_numbers hide space . Return"
+    upper:
+        - "Q W E R T Y U I O P"
+        - "A S D F G H J K L"
+        - "show_upper Z X C V B N M BackSpace"
+        - "show_numbers hide space . Return"
+    numbers:
+        - "1 2 3 4 5 6 7 8 9 0"
+        - "@ # $ % & - _ + ( )"
+        - "show_symbols , \" ' : ; ! ? BackSpace"
+        - "show_letters hide space . Return"
+    symbols:
+        - "~ ` | · √ π τ ÷ × ¶"
+        - "© ® £ € ¥ ^ ° * { }"
+        - "show_numbers_from_symbols \\ / < > = [ ] BackSpace"
+        - "show_letters hide space . Return"
+
+buttons:
+    show_upper:
+        action:
+            locking:
+                lock_view: "upper"
+                unlock_view: "base"
+        outline: "change-view"
+        icon: "key-shift"
+    BackSpace:
+        outline: "special-2"
+        icon: "edit-clear-symbolic"
+        action: "erase"
+    hide:
+        outline: "special"
+        icon: "go-down-symbolic"
+        label: "▼"
+        keysym: "Escape"
+    show_numbers:
+        action:
+            set_view: "numbers"
+        outline: "change-view-2"
+        label: "123"
+    show_numbers_from_symbols:
+        action:
+            set_view: "numbers"
+        outline: "change-view"
+        label: "123"
+    show_letters:
+        action:
+            set_view: "base"
+        outline: "change-view-2"
+        label: "ABC"
+    show_symbols:
+        action:
+            set_view: "symbols"
+        outline: "change-view"
+        label: "*/="
+    .:
+        outline: "large"
+    space:
+        outline: "spaceline"
+        text: " "
+    Return:
+        outline: "special-3"
+        icon: "key-enter"
+        keysym: "Return"
+SQUEEK_US_WIDE
+
+    cat > "${kbd_dir}/us.yaml" << 'SQUEEK_US'
+# Language: English (US)
+---
+outlines:
+    default:       { width: 35.657, height: 52 }
+    change-view:   { width: 53.485, height: 52 }
+    change-view-2: { width: 62.399, height: 52 }
+    large:         { width: 44.571, height: 52 }
+    spaceline:     { width: 142.63, height: 52 }
+    special:       { width: 44.571, height: 52 }
+    special-2:     { width: 53.485, height: 52 }
+    special-3:     { width: 62.399, height: 52 }
+
+views:
+    base:
+        - "q w e r t y u i o p"
+        - "a s d f g h j k l"
+        - "show_upper z x c v b n m BackSpace"
+        - "show_numbers hide space . Return"
+    upper:
+        - "Q W E R T Y U I O P"
+        - "A S D F G H J K L"
+        - "show_upper Z X C V B N M BackSpace"
+        - "show_numbers hide space . Return"
+    numbers:
+        - "1 2 3 4 5 6 7 8 9 0"
+        - "@ # $ % & - _ + ( )"
+        - "show_symbols , \" ' : ; ! ? BackSpace"
+        - "show_letters hide space . Return"
+    symbols:
+        - "~ ` | · √ π τ ÷ × ¶"
+        - "© ® £ € ¥ ^ ° * { }"
+        - "show_numbers_from_symbols \\ / < > = [ ] BackSpace"
+        - "show_letters hide space . Return"
+
+buttons:
+    show_upper:
+        action:
+            locking:
+                lock_view: "upper"
+                unlock_view: "base"
+        outline: "change-view"
+        icon: "key-shift"
+    BackSpace:
+        outline: "special-2"
+        icon: "edit-clear-symbolic"
+        action: "erase"
+    hide:
+        outline: "special"
+        icon: "go-down-symbolic"
+        label: "▼"
+        keysym: "Escape"
+    show_numbers:
+        action:
+            set_view: "numbers"
+        outline: "change-view-2"
+        label: "123"
+    show_numbers_from_symbols:
+        action:
+            set_view: "numbers"
+        outline: "change-view"
+        label: "123"
+    show_letters:
+        action:
+            set_view: "base"
+        outline: "change-view-2"
+        label: "ABC"
+    show_symbols:
+        action:
+            set_view: "symbols"
+        outline: "change-view"
+        label: "*/="
+    .:
+        outline: "large"
+    space:
+        outline: "spaceline"
+        text: " "
+    Return:
+        outline: "special-3"
+        icon: "key-enter"
+        keysym: "Return"
+SQUEEK_US
+done
 
 # Ensure user-level config/cache dirs are writable by the session user.
 # Some build-time mkdir operations run as root and can otherwise leave these
