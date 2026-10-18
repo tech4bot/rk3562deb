@@ -1172,6 +1172,18 @@ BLOCK_AV1_MANIFEST
       return origDecodingInfo(config);
     };
   }
+
+  // Tablet touch usability: Tap on whitespace/background blurs active input to dismiss OSK
+  function handleTapOutside(e) {
+    var active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+      if (!e.target.closest('input, textarea, [contenteditable="true"], select, button, a, [role="button"]')) {
+        active.blur();
+      }
+    }
+  }
+  document.addEventListener('pointerdown', handleTapOutside, true);
+  document.addEventListener('touchstart', handleTapOutside, true);
 })();
 BLOCK_AV1_JS
     chmod -R 755 "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1"
