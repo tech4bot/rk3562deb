@@ -4568,6 +4568,16 @@ WantedBy=multi-user.target
 RK_POWER_PROFILE_SYNC_UNIT
 chroot "${ROOTFS_MNT}" systemctl enable rk-power-profile-sync.service
 
+# Ensure power-profiles-daemon starts early with D-Bus rather than waiting
+# for multi-user.target, so Phosh and Settings have power profiles available
+# immediately on desktop login without waiting for camera or rootfs expansion.
+mkdir -p "${ROOTFS_MNT}/etc/systemd/system/power-profiles-daemon.service.d"
+cat > "${ROOTFS_MNT}/etc/systemd/system/power-profiles-daemon.service.d/early-boot.conf" << 'PPD_EARLY_BOOT'
+[Unit]
+After=
+After=dbus.service
+PPD_EARLY_BOOT
+
 # 10d. RK817 battery gauge recovery (fixes occasional false 0% after cold-off).
 echo "[*] Installing RK817 battery gauge recovery service..."
 cat > "${ROOTFS_MNT}/usr/local/sbin/rk-battery-gauge-fix.sh" << 'RK_BAT_GAUGE_FIX'
