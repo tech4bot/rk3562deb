@@ -511,8 +511,8 @@ The Wi-Fi and Bluetooth driver source in `overlay/drivers/net/wireless/ea6621q/`
 ## Contributors
 
 - **[@tech4bot](https://github.com/tech4bot)** — Project creator & maintainer
-- **[@drhaynes](https://github.com/drhaynes)** (David Haynes) — Panfrost GPU hardware acceleration research, driver clock fixes, and boot stability ([#11](https://github.com/tech4bot/rk3562deb/issues/11))
-- **[@ethersloth](https://github.com/ethersloth)** (Gregory Whitlock) — Rockchip VA-API Chromium hardware video decode patches, DDR stability analysis, and playback bench ([ethersloth/c20e-rk3562-linux](https://github.com/ethersloth/c20e-rk3562-linux))
+- **[@drhaynes](https://github.com/drhaynes)** — Panfrost GPU hardware acceleration research, driver clock fixes, and boot stability ([#11](https://github.com/tech4bot/rk3562deb/issues/11))
+- **[@ethersloth](https://github.com/ethersloth)** — Rockchip VA-API Chromium hardware video decode patches, DDR stability analysis, and playback bench ([ethersloth/c20e-rk3562-linux](https://github.com/ethersloth/c20e-rk3562-linux))
 
 ---
 
