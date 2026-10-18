@@ -868,6 +868,12 @@ if [ -f "${ROOT_DIR}/prebuilt/vaapi/rockchip_drv_video.so" ] && [ -f "${ROOT_DIR
     ln -sf librockchip_mpp.so.0 "${ROOTFS_MNT}/usr/local/lib/librockchip_mpp.so.1"
     ln -sf librockchip_mpp.so.0 "${ROOTFS_MNT}/usr/local/lib/librockchip_mpp.so"
 
+    # Also install directly to system multiarch path to override any stale package builds
+    cp "${ROOT_DIR}/prebuilt/vaapi/librockchip_mpp.so.0" "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/librockchip_mpp.so.0"
+    chmod 0755 "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/librockchip_mpp.so.0"
+    ln -sf librockchip_mpp.so.0 "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/librockchip_mpp.so.1"
+    ln -sf librockchip_mpp.so.0 "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/librockchip_mpp.so"
+
     echo "/usr/local/lib" > "${ROOTFS_MNT}/etc/ld.so.conf.d/local.conf"
     chroot "${ROOTFS_MNT}" ldconfig
 else
@@ -1000,7 +1006,7 @@ BLOCK_AV1_MANIFEST
   if (window.MediaSource && window.MediaSource.isTypeSupported) {
     var origIsTypeSupported = window.MediaSource.isTypeSupported.bind(window.MediaSource);
     window.MediaSource.isTypeSupported = function(type) {
-      if (typeof type === 'string' && (type.toLowerCase().includes('av01') || type.toLowerCase().includes('av1'))) {
+      if (typeof type === 'string' && (type.toLowerCase().includes('av01') || type.toLowerCase().includes('av1') || type.toLowerCase().includes('vp09') || type.toLowerCase().includes('vp9'))) {
         return false;
       }
       return origIsTypeSupported(type);
@@ -1009,7 +1015,7 @@ BLOCK_AV1_MANIFEST
   if (window.HTMLMediaElement && window.HTMLMediaElement.prototype.canPlayType) {
     var origCanPlayType = window.HTMLMediaElement.prototype.canPlayType;
     window.HTMLMediaElement.prototype.canPlayType = function(type) {
-      if (typeof type === 'string' && (type.toLowerCase().includes('av01') || type.toLowerCase().includes('av1'))) {
+      if (typeof type === 'string' && (type.toLowerCase().includes('av01') || type.toLowerCase().includes('av1') || type.toLowerCase().includes('vp09') || type.toLowerCase().includes('vp9'))) {
         return '';
       }
       return origCanPlayType.apply(this, arguments);
@@ -1020,7 +1026,7 @@ BLOCK_AV1_MANIFEST
     navigator.mediaCapabilities.decodingInfo = function(config) {
       if (config && config.video && config.video.contentType) {
         var ct = config.video.contentType.toLowerCase();
-        if (ct.includes('av01') || ct.includes('av1')) {
+        if (ct.includes('av01') || ct.includes('av1') || ct.includes('vp09') || ct.includes('vp9')) {
           return Promise.resolve({
             supported: false,
             smooth: false,
@@ -1063,7 +1069,7 @@ CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --password-store=basic"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --ignore-gpu-blocklist"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-decode"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-accelerated-video-encode"
-CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiVideoEncoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,UseOzonePlatform,WebRtcPipeWireCamera"
+CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --enable-features=VaapiVideoDecoder,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks,VaapiVideoEncoder,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoEncoder,UseOzonePlatform,WebRtcPipeWireCamera"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --disable-features=UseChromeOSDirectVideoDecoder,Vulkan"
 CHROMIUM_FLAGS="${CHROMIUM_FLAGS} --load-extension=/usr/share/chromium/extensions/block-av1"
 CHROMIUM_HW_FLAGS
