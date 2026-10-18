@@ -900,9 +900,9 @@ BUILD_VAAPI_EOF
 fi
 
 # Install MPP and DMA heap udev rules
-if [ -f "${ROOT_DIR}/overlay/70-c20e-mpp.rules" ]; then
-    cp "${ROOT_DIR}/overlay/70-c20e-mpp.rules" "${ROOTFS_MNT}/etc/udev/rules.d/70-c20e-mpp.rules"
-    chmod 0644 "${ROOTFS_MNT}/etc/udev/rules.d/70-c20e-mpp.rules"
+if [ -f "${ROOT_DIR}/overlay/70-rk-mpp.rules" ]; then
+    cp "${ROOT_DIR}/overlay/70-rk-mpp.rules" "${ROOTFS_MNT}/etc/udev/rules.d/70-rk-mpp.rules"
+    chmod 0644 "${ROOTFS_MNT}/etc/udev/rules.d/70-rk-mpp.rules"
 fi
 
 # Keep VA-API environment deterministic across rebuilds.
@@ -4363,15 +4363,15 @@ RK_POWER_TUNE_UNIT
 chroot "${ROOTFS_MNT}" systemctl enable rk-power-tune.service
 
 # Pin DDR frequency service before display manager
-if [ -f "${ROOT_DIR}/overlay/c20e-dvfs-policy.sh" ] && \
-   [ -f "${ROOT_DIR}/overlay/c20e-dvfs-policy.service" ]; then
+if [ -f "${ROOT_DIR}/overlay/rk-dmc-pin.sh" ] && \
+   [ -f "${ROOT_DIR}/overlay/rk-dmc-pin.service" ]; then
     echo "[*] Installing DDR frequency pin service..."
-    cp "${ROOT_DIR}/overlay/c20e-dvfs-policy.sh" "${ROOTFS_MNT}/usr/local/sbin/c20e-dvfs-policy"
-    chmod 0755 "${ROOTFS_MNT}/usr/local/sbin/c20e-dvfs-policy"
-    cp "${ROOT_DIR}/overlay/c20e-dvfs-policy.service" \
-       "${ROOTFS_MNT}/etc/systemd/system/c20e-dvfs-policy.service"
-    chmod 0644 "${ROOTFS_MNT}/etc/systemd/system/c20e-dvfs-policy.service"
-    chroot "${ROOTFS_MNT}" systemctl enable c20e-dvfs-policy.service || true
+    cp "${ROOT_DIR}/overlay/rk-dmc-pin.sh" "${ROOTFS_MNT}/usr/local/sbin/rk-dmc-pin.sh"
+    chmod 0755 "${ROOTFS_MNT}/usr/local/sbin/rk-dmc-pin.sh"
+    cp "${ROOT_DIR}/overlay/rk-dmc-pin.service" \
+       "${ROOTFS_MNT}/etc/systemd/system/rk-dmc-pin.service"
+    chmod 0644 "${ROOTFS_MNT}/etc/systemd/system/rk-dmc-pin.service"
+    chroot "${ROOTFS_MNT}" systemctl enable rk-dmc-pin.service || true
 fi
 
 # Map power-profiles-daemon profiles to cpufreq behavior so Phosh's

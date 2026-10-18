@@ -1,5 +1,5 @@
 From: C20e Fedora port <https://github.com/ethersloth/rk3562deb>
-Subject: [PATCH 2/2] c20e: let MPP output frames in decode order
+Subject: [PATCH 2/2] rk3562: let MPP output frames in decode order
 
 do_h264_decode() submits one packet and then blocks until that packet's own
 frame comes back.  MPP, though, emits frames in DISPLAY order, so for a stream

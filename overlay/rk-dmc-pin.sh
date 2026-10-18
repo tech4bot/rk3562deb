@@ -3,9 +3,9 @@
 #
 # Without this, the dmc_ondemand governor scales DRAM between 528 MHz and 920 MHz.
 # Frequency transitions while VOP2 is scanning out cause bus/page faults and memory corruption.
-LOG=/var/log/c20e-dvfs-policy.log
+LOG=/var/log/rk-dmc-pin.log
 exec >>"$LOG" 2>&1
-echo "=== c20e dvfs policy $(date -Is) ==="
+echo "=== rk dmc pin $(date -Is) ==="
 
 for d in /sys/class/devfreq/*dmc* /sys/class/devfreq/dmc; do
     [ -d "$d" ] || continue

@@ -428,8 +428,8 @@
 				#size-cells = <0>;
 				port@0 {
 					reg = <0>;
-					c20e_usbc_role_sw: endpoint {
-						remote-endpoint = <&c20e_dwc3_role_switch>;
+					rk_usbc_role_sw: endpoint {
+						remote-endpoint = <&rk_dwc3_role_switch>;
 					};
 				};
 			};
@@ -983,9 +983,9 @@
 	port {
 		#address-cells = <1>;
 		#size-cells = <0>;
-		c20e_dwc3_role_switch: endpoint@0 {
+		rk_dwc3_role_switch: endpoint@0 {
 			reg = <0>;
-			remote-endpoint = <&c20e_usbc_role_sw>;
+			remote-endpoint = <&rk_usbc_role_sw>;
 		};
 	};
 };

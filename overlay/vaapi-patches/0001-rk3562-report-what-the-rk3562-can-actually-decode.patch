@@ -1,5 +1,5 @@
 From: C20e Fedora port <https://github.com/ethersloth/rk3562deb>
-Subject: [PATCH 1/2] c20e: report what the RK3562 can actually decode
+Subject: [PATCH 1/2] rk3562: report what the RK3562 can actually decode
 
 Chrome probes a VA-API driver before it will use it (FillProfileInfo_Locked)
 and drops every profile whose limits it cannot read.  On the RK3562 tablet it
