@@ -1,0 +1,14 @@
+# Let the desktop user reach the Rockchip video decoder/encoder.
+#
+# /dev/mpp_service is created root-only (crw------- root root), so only root
+# could use hardware video decode; Chrome and the media players run as the
+# logged-in user. uaccess grants that user an ACL on it (the same mechanism
+# used for /dev/dri), and the video group covers non-seat users.
+# NOTE the subsystem is Rockchip's own "mpp_class", not "misc".
+KERNEL=="mpp_service", SUBSYSTEM=="mpp_class", GROUP="video", MODE="0660", TAG+="uaccess"
+
+# MPP allocates decode buffers from the DMA heaps, which are root:video 0660.
+# Without access here the decoder aborts before it starts:
+#   "os_allocator_dma_heap_open open dma heap type 0 system failed"
+#   "mpp_hal_init ... vp9d_vdpu382 init failed"
+SUBSYSTEM=="dma_heap", TAG+="uaccess"

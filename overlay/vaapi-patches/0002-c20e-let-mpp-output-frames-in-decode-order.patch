@@ -1,0 +1,155 @@
+From: C20e Fedora port <https://github.com/ethersloth/rk3562deb>
+Subject: [PATCH 2/2] c20e: let MPP output frames in decode order
+
+do_h264_decode() submits one packet and then blocks until that packet's own
+frame comes back.  MPP, though, emits frames in DISPLAY order, so for a stream
+with B-frames the frame just submitted cannot come out until several more
+packets have been submitted -- which cannot happen, because the caller is
+blocked in vaEndPicture.  Every frame therefore waited out the poll budget.
+
+Measured on an RK3562 tablet (Fedora 44, Chrome 153, 1080p30 H.264 with
+B-frames, frame counters read from the <video> element itself):
+
+    before   15-20 fps, video clock at 0.66x real time (visible stop/start)
+    after    a steady 30.0 fps at 1.0x, 36 dropped frames, all at startup
+
+CPU for the same clip: 128% of one core with the hardware decoder, 208% with
+software decode.
+
+MPP_DEC_SET_IMMEDIATE_OUT makes MPP hand over each frame as soon as it is
+decoded.  Decode order is what VA-API wants in any case: the application does
+its own reordering and addresses every frame by its own surface, so
+display-order output only added latency.
+
+Also here, both behind environment variables and off by default:
+RK_VAAPI_COPY_STATS reports per-frame timings (the numbers above came from it:
+20.2 ms from packet to frame at 1080p, of which 4.5 ms is the copy into the
+surface buffer), and RK_VAAPI_NOCOPY skips the copy for measurement.
+The poll sleep goes from 1 ms to 250 us: a 1 ms sleep per frame is 6% of a
+60 fps frame budget.
+---
+diff --git a/src/rockchip_drv_video.c b/src/rockchip_drv_video.c
+index b49b2ff..1c30cae 100644
+--- a/src/rockchip_drv_video.c
++++ b/src/rockchip_drv_video.c
+@@ -36,6 +36,7 @@
+ #include <pthread.h>
+ #include <sys/ioctl.h>
+ #include <errno.h>
++#include <time.h>
+ 
+ #include "h264.h"
+ 
+@@ -485,6 +566,19 @@ static VAStatus rk_CreateContext(VADriverContextP ctx,
+         int block = 0;
+         c->mpi->control(c->mpp, MPP_SET_OUTPUT_BLOCK, (MppParam)&block);
+ 
++        /* Output frames in DECODE order, which is what VA-API wants: the
++         * application does its own reordering and every frame is addressed by
++         * its own surface, so MPP's display-order output only adds latency.
++         * Without this, EndPicture below waits for a frame MPP cannot emit
++         * until several more packets have been submitted, and each wait runs
++         * into its timeout -- measured 2026-09-22 on a 1080p30 H.264 clip with
++         * B-frames: 15-20 fps in slow motion with the hardware decoder, versus
++         * a steady 30 fps in software. */
++        RK_U32 immediate_out = 1;
++        if (c->mpi->control(c->mpp, MPP_DEC_SET_IMMEDIATE_OUT,
++                            (MppParam)&immediate_out) != MPP_OK)
++            LOG("CreateContext: MPP_DEC_SET_IMMEDIATE_OUT rejected, decode stays in display order");
++
+         c->used      = true;
+         c->config_id = config_id;
+         c->width     = width;
+@@ -615,6 +709,33 @@ static VAStatus rk_RenderPicture(VADriverContextP ctx,
+     return VA_STATUS_SUCCESS;
+ }
+ 
++/* Copy cost accounting. The decoded frame lands in an MPP-owned DMA buffer and
++ * is memcpy'd into the surface's own buffer; both are uncached DMA mappings, so
++ * this is the one place in the decode path where the CPU touches every pixel.
++ * RK_VAAPI_COPY_STATS=1 reports how long it actually takes, every 60 frames;
++ * RK_VAAPI_NOCOPY=1 skips the copy (picture is then wrong -- measurement only).
++ */
++static inline int64_t rk_now_us(void)
++{
++    struct timespec ts;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
++}
++
++static int rk_copy_stats(void)
++{
++    static int on = -1;
++    if (on < 0) { const char *e = getenv("RK_VAAPI_COPY_STATS"); on = (e && *e != '0'); }
++    return on;
++}
++
++static int rk_nocopy(void)
++{
++    static int on = -1;
++    if (on < 0) { const char *e = getenv("RK_VAAPI_NOCOPY"); on = (e && *e != '0'); }
++    return on;
++}
++
+ /* Route one MPP output frame to the right surface and mark it decoded.
+  * Shared by EndPicture poll loops and the SyncSurface drain loop. */
+ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
+@@ -668,9 +789,11 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
+     bool i10    = MPP_FRAME_FMT_IS_YUV_10BIT(ffmt);
+     int  bpp    = i10 ? 2 : 1;
+     int  copied = 0;
++    int64_t t_map0 = rk_now_us();
+     void *src = buf ? mpp_buffer_get_ptr(buf) : NULL;
+     void *dst = s->priv_buf ? mpp_buffer_get_ptr(s->priv_buf) : NULL;
+-    if (src && dst) {
++    int64_t t_copy0 = rk_now_us();
++    if (src && dst && !rk_nocopy()) {
+         const uint8_t *sy = (const uint8_t *)src;
+         uint8_t       *dy = (uint8_t       *)dst;
+         for (int r = 0; r < copy_h; r++)
+@@ -685,6 +808,16 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
+                    (size_t)src_hs * bpp);
+         copied = 1;
+     }
++    if (rk_copy_stats()) {
++        static int64_t n, map_us, copy_us, bytes;
++        int64_t t1 = rk_now_us();
++        n++; map_us += t_copy0 - t_map0; copy_us += t1 - t_copy0;
++        bytes += (int64_t)src_hs * copy_h * bpp * 3 / 2;
++        if (n % 60 == 0)
++            LOG("copy stats: %lld frames, map %lld us/frame, copy %lld us/frame (%lld MB/s)",
++                (long long)n, (long long)(map_us / n), (long long)(copy_us / n),
++                copy_us ? (long long)(bytes * 2 / copy_us) : 0LL);
++    }
+     mpp_frame_deinit(&frame);
+ 
+     pthread_mutex_lock(&s->lock);
+@@ -791,7 +924,11 @@ static VAStatus do_h264_decode(RKContext *c, RKDriver *d)
+         return VA_STATUS_ERROR_DECODING_ERROR;
+     }
+ 
+-    for (int tries = 0; tries < 100; tries++) {
++    int64_t t_put = rk_now_us();
++    /* Wait for THIS packet's frame. With immediate-output mode above it is the
++     * next one out, so this is one decode, not a reorder delay; the poll is
++     * 250 us because a 1 ms sleep per frame is 6% of a 60 fps frame budget. */
++    for (int tries = 0; tries < 400; tries++) {
+         RKSurface *tgt = surface_by_id(d, c->render_target);
+         if (tgt) {
+             pthread_mutex_lock(&tgt->lock);
+@@ -803,7 +940,14 @@ static VAStatus do_h264_decode(RKContext *c, RKDriver *d)
+         if (c->mpi->decode_get_frame(c->mpp, &frame) == MPP_OK && frame)
+             assign_mpp_frame(frame, c, d);
+         else
+-            usleep(1000);
++            usleep(250);
++    }
++    if (rk_copy_stats()) {
++        static int64_t n, wait_us;
++        n++; wait_us += rk_now_us() - t_put;
++        if (n % 60 == 0)
++            LOG("decode stats: %lld packets, %lld us/frame from put_packet to frame ready",
++                (long long)n, (long long)(wait_us / n));
+     }
+ 
+     return VA_STATUS_SUCCESS;

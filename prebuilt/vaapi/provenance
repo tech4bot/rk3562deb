@@ -1,0 +1,8 @@
+# Built by tools/c20e-build-vaapi.sh on 2026-09-23T02:09Z, aarch64, on the tablet itself.
+mpp             https://github.com/rockchip-linux/mpp.git @ 14729dd578e570e5f00fd1dd2113f5429012d64b
+rockchip-vaapi  https://github.com/woodyst/rockchip-vaapi.git @ e8c64ddc528c9b00b8f5c4041d0f28acfab5559d
+patches         0001-c20e-report-what-the-rk3562-can-actually-decode.patch 0002-c20e-let-mpp-output-frames-in-decode-order.patch
+soname          librockchip_mpp.so.1 -> librockchip_mpp.so.0
+kernel          6.1.172
+gcc             16
+libva           2.23.0

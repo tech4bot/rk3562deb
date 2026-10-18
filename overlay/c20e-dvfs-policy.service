@@ -1,0 +1,12 @@
+[Unit]
+Description=Pin DDR frequency for display stability
+After=sysinit.target
+Before=display-manager.service lightdm.service gdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/c20e-dvfs-policy
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

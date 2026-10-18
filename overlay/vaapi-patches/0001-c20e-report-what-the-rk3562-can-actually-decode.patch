@@ -1,0 +1,256 @@
+From: C20e Fedora port <https://github.com/ethersloth/rk3562deb>
+Subject: [PATCH 1/2] c20e: report what the RK3562 can actually decode
+
+Chrome probes a VA-API driver before it will use it (FillProfileInfo_Locked)
+and drops every profile whose limits it cannot read.  On the RK3562 tablet it
+dropped all of them, so Chrome fell back to software decode even though the
+driver and MPP were working.
+
+ - only advertise profiles MPP says the chip supports
+   (mpp_check_support_format), and 10-bit only on SoCs that have it, read from
+   /proc/device-tree/compatible -- rk3562's decoder is 8-bit
+ - vaGetConfigAttributes: report VAConfigAttribMaxPictureWidth/Height
+   (4096x2304, VP8 1920x1088)
+ - vaQueryConfigAttributes: report VAConfigAttribRTFormat; it returned an empty
+   list, which Chrome reads as "no supported format"
+ - vaQuerySurfaceAttributes: add the missing VASurfaceAttribMaxHeight next to
+   MaxWidth, and offer P010 only where 10-bit exists
+ - RK_VAAPI_LOG=stderr, because a sandboxed Chrome cannot create a log file
+
+With these, Chrome accepts every profile the chip has and opens
+/dev/mpp_service for playback.
+---
+diff --git a/src/rockchip_drv_video.c b/src/rockchip_drv_video.c
+index b49b2ff..1c30cae 100644
+--- a/src/rockchip_drv_video.c
++++ b/src/rockchip_drv_video.c
+@@ -43,7 +44,16 @@
+ static FILE *g_log_fp = NULL;
+ static void log_init(void) {
+     const char *p = getenv("RK_VAAPI_LOG");
+-    if (p && *p) g_log_fp = fopen(p, "a");
++    if (!p || !*p)
++        return;
++    /* C20e: "stderr" logs there instead of to a file -- a sandboxed host
++     * (Chrome's GPU process) cannot open new files, so file logging is
++     * silently empty exactly where it is most needed. */
++    if (!strcmp(p, "stderr")) {
++        g_log_fp = stderr;
++        return;
++    }
++    g_log_fp = fopen(p, "a");
+ }
+ #define LOG(fmt, ...) do { if (g_log_fp) \
+     fprintf(g_log_fp, "[rk-vaapi pid=%d] " fmt "\n", getpid(), ##__VA_ARGS__); \
+@@ -216,19 +226,62 @@ static VAStatus rk_Terminate(VADriverContextP ctx) {
+     return VA_STATUS_SUCCESS;
+ }
+ 
++/*
++ * C20e: only advertise what this chip can actually do.
++ *
++ * MPP knows which codecs the SoC has (mpp_check_support_format), but it does
++ * not expose bit depth: RK3562 uses the vdpu382_lite engine, whose MPP SoC
++ * entry has cap_10bit = 0, while RK3588's vdpu383 has it. Advertising 10-bit
++ * profiles the hardware cannot decode is worse than not advertising them --
++ * the player picks the profile and playback breaks instead of falling back to
++ * software. So the SoC is matched from the device tree for that one bit.
++ */
++static int rk_soc_has_10bit(void) {
++    static int cached = -1;
++    if (cached >= 0)
++        return cached;
++    cached = 1;
++    FILE *f = fopen("/proc/device-tree/compatible", "r");
++    if (f) {
++        char buf[512] = {0};
++        size_t got = fread(buf, 1, sizeof(buf) - 1, f);
++        fclose(f);
++        /* the property is a list of NUL-separated strings */
++        for (size_t i = 0; i + 1 < got; i++)
++            if (buf[i] == '\0')
++                buf[i] = ' ';
++        if (strstr(buf, "rk3562"))
++            cached = 0;
++    }
++    LOG("SoC 10-bit decode: %s", cached ? "yes" : "no (profiles hidden)");
++    return cached;
++}
++
++static int rk_codec_supported(MppCodingType coding) {
++    return mpp_check_support_format(MPP_CTX_DEC, coding) == MPP_OK;
++}
++
+ static VAStatus rk_QueryConfigProfiles(VADriverContextP ctx,
+                                        VAProfile *list, int *n) {
+     (void)ctx;
+     int i = 0;
+-    list[i++] = VAProfileH264ConstrainedBaseline;
+-    list[i++] = VAProfileH264Main;
+-    list[i++] = VAProfileH264High;
+-    list[i++] = VAProfileH264High10;
+-    list[i++] = VAProfileHEVCMain;
+-    list[i++] = VAProfileHEVCMain10;
+-    list[i++] = VAProfileVP8Version0_3;
+-    list[i++] = VAProfileVP9Profile0;
+-    list[i++] = VAProfileVP9Profile2;
++    int ten = rk_soc_has_10bit();
++    if (rk_codec_supported(MPP_VIDEO_CodingAVC)) {
++        list[i++] = VAProfileH264ConstrainedBaseline;
++        list[i++] = VAProfileH264Main;
++        list[i++] = VAProfileH264High;
++        if (ten) list[i++] = VAProfileH264High10;
++    }
++    if (rk_codec_supported(MPP_VIDEO_CodingHEVC)) {
++        list[i++] = VAProfileHEVCMain;
++        if (ten) list[i++] = VAProfileHEVCMain10;
++    }
++    if (rk_codec_supported(MPP_VIDEO_CodingVP8))
++        list[i++] = VAProfileVP8Version0_3;
++    if (rk_codec_supported(MPP_VIDEO_CodingVP9)) {
++        list[i++] = VAProfileVP9Profile0;
++        if (ten) list[i++] = VAProfileVP9Profile2;
++    }
+     /* AV1 not advertised: MPP needs a full OBU bytestream but VA-API hands us
+      * only headerless tile data, so MPP can never parse it. Firefox falls back
+      * to VP9 (hardware-decoded) for AV1-capable content. */
+@@ -251,7 +304,7 @@ static VAStatus rk_GetConfigAttributes(VADriverContextP ctx,
+                                        VAProfile profile,
+                                        VAEntrypoint entrypoint,
+                                        VAConfigAttrib *list, int n) {
+-    (void)ctx; (void)profile; (void)entrypoint;
++    (void)ctx; (void)entrypoint;
+     for (int i = 0; i < n; i++) {
+         LOG("GetConfigAttributes: type=%d", list[i].type);
+         switch (list[i].type) {
+@@ -264,6 +317,20 @@ static VAStatus rk_GetConfigAttributes(VADriverContextP ctx,
+         case VAConfigAttribEncryption:
+             list[i].value = VA_ATTRIB_NOT_SUPPORTED;
+             break;
++        /*
++         * C20e: Chrome refuses a profile whose maximum picture size it cannot
++         * read ("Empty codec maximum resolution" from vaapi_wrapper.cc, then
++         * FillProfileInfo_Locked fails for every profile) -- so hardware decode
++         * never engaged. Firefox does not ask, which is why this was missing.
++         * MPP's SoC table marks this engine 4K-capable; VP8 is limited to
++         * 1080p by the same table.
++         */
++        case VAConfigAttribMaxPictureWidth:
++            list[i].value = (profile == VAProfileVP8Version0_3) ? 1920 : 4096;
++            break;
++        case VAConfigAttribMaxPictureHeight:
++            list[i].value = (profile == VAProfileVP8Version0_3) ? 1088 : 2304;
++            break;
+         default:
+             LOG("GetConfigAttributes: unsupported type=%d", list[i].type);
+             list[i].value = VA_ATTRIB_NOT_SUPPORTED;
+@@ -318,10 +385,24 @@ static VAStatus rk_QueryConfigAttributes(VADriverContextP ctx,
+     RKDriver *d = drv_from_ctx(ctx);
+     RKConfig *c = config_by_id(d, id);
+     if (!c) return VA_STATUS_ERROR_INVALID_CONFIG;
+-    (void)attribs;
+     *profile = c->profile;
+     *entrypoint = c->entrypoint;
+-    *n = 0;
++    /*
++     * C20e: report the config's RT formats. Chrome's FillProfileInfo_Locked
++     * ends by calling vaQueryConfigAttributes and looking for
++     * VAConfigAttribRTFormat; returning nothing made is_any_profile_supported
++     * false, so it rejected every profile ("FillProfileInfo_Locked failed for
++     * va_profile ...") and never used hardware decode. Firefox does not make
++     * this call, which is why it worked there.
++     */
++    int k = 0;
++    if (attribs) {
++        attribs[k].type  = VAConfigAttribRTFormat;
++        attribs[k].value = VA_RT_FORMAT_YUV420 |
++                           (rk_soc_has_10bit() ? VA_RT_FORMAT_YUV420_10 : 0);
++        k++;
++    }
++    *n = k;
+     return VA_STATUS_SUCCESS;
+ }
+ 
+@@ -1371,8 +1515,16 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
+     LOG("QuerySurfaceAttributes: config=0x%x list=%s",
+         config, attrib_list ? "provided" : "NULL (query count)");
+ 
+-    /* Firefox calls this twice: first with NULL to get count, then with buffer */
+-    const unsigned int n = 4;
++    /*
++     * C20e: build the list according to what the SoC can do, and ALWAYS give
++     * both MaxWidth and MaxHeight. Chrome's GetMaxResolution_Locked needs the
++     * pair; with height missing it logs "Empty codec maximum resolution" and
++     * drops every profile, so hardware decode never engaged (Firefox does not
++     * check, which is why only MaxWidth was here). P010 is only offered where
++     * the decoder can do 10-bit -- see rk_soc_has_10bit().
++     */
++    const int ten = rk_soc_has_10bit();
++    const unsigned int n = ten ? 5 : 4;
+     if (!attrib_list) {
+         *num_attribs = n;
+         return VA_STATUS_SUCCESS;
+@@ -1382,31 +1534,40 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
+         return VA_STATUS_ERROR_MAX_NUM_EXCEEDED;
+     }
+ 
+-    /* Pixel format: NV12 (8-bit) */
+-    attrib_list[0].type              = VASurfaceAttribPixelFormat;
+-    attrib_list[0].flags             = VA_SURFACE_ATTRIB_GETTABLE;
+-    attrib_list[0].value.type        = VAGenericValueTypeInteger;
+-    attrib_list[0].value.value.i     = VA_FOURCC_NV12;
+-
+-    /* Pixel format: P010 (10-bit) */
+-    attrib_list[1].type              = VASurfaceAttribPixelFormat;
+-    attrib_list[1].flags             = VA_SURFACE_ATTRIB_GETTABLE;
+-    attrib_list[1].value.type        = VAGenericValueTypeInteger;
+-    attrib_list[1].value.value.i     = VA_FOURCC_P010;
+-
+-    /* Memory type: VA-managed + DRM PRIME 2 */
+-    attrib_list[2].type              = VASurfaceAttribMemoryType;
+-    attrib_list[2].flags             = VA_SURFACE_ATTRIB_GETTABLE |
++    unsigned int k = 0;
++    attrib_list[k].type              = VASurfaceAttribPixelFormat;
++    attrib_list[k].flags             = VA_SURFACE_ATTRIB_GETTABLE;
++    attrib_list[k].value.type        = VAGenericValueTypeInteger;
++    attrib_list[k].value.value.i     = VA_FOURCC_NV12;
++    k++;
++
++    if (ten) {
++        attrib_list[k].type          = VASurfaceAttribPixelFormat;
++        attrib_list[k].flags         = VA_SURFACE_ATTRIB_GETTABLE;
++        attrib_list[k].value.type    = VAGenericValueTypeInteger;
++        attrib_list[k].value.value.i = VA_FOURCC_P010;
++        k++;
++    }
++
++    attrib_list[k].type              = VASurfaceAttribMemoryType;
++    attrib_list[k].flags             = VA_SURFACE_ATTRIB_GETTABLE |
+                                        VA_SURFACE_ATTRIB_SETTABLE;
+-    attrib_list[2].value.type        = VAGenericValueTypeInteger;
+-    attrib_list[2].value.value.i     = (int)(VA_SURFACE_ATTRIB_MEM_TYPE_VA |
++    attrib_list[k].value.type        = VAGenericValueTypeInteger;
++    attrib_list[k].value.value.i     = (int)(VA_SURFACE_ATTRIB_MEM_TYPE_VA |
+                                        VA_SURFACE_ATTRIB_MEM_TYPE_DRM_PRIME_2);
+-
+-    /* Max resolution */
+-    attrib_list[3].type              = VASurfaceAttribMaxWidth;
+-    attrib_list[3].flags             = VA_SURFACE_ATTRIB_GETTABLE;
+-    attrib_list[3].value.type        = VAGenericValueTypeInteger;
+-    attrib_list[3].value.value.i     = 7680;
++    k++;
++
++    attrib_list[k].type              = VASurfaceAttribMaxWidth;
++    attrib_list[k].flags             = VA_SURFACE_ATTRIB_GETTABLE;
++    attrib_list[k].value.type        = VAGenericValueTypeInteger;
++    attrib_list[k].value.value.i     = 4096;
++    k++;
++
++    attrib_list[k].type              = VASurfaceAttribMaxHeight;
++    attrib_list[k].flags             = VA_SURFACE_ATTRIB_GETTABLE;
++    attrib_list[k].value.type        = VAGenericValueTypeInteger;
++    attrib_list[k].value.value.i     = 2304;
++    k++;
+ 
+     *num_attribs = n;
+     LOG("QuerySurfaceAttributes: returned %u attribs (NV12, P010, DRM_PRIME_2)", n);

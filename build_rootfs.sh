@@ -852,200 +852,58 @@ Section "Device"
 EndSection
 XORG_GPU
 
-# Build rockchip_drv_video.so (Rockchip VAAPI driver) inside the chroot.
-# Sources: sujit-168/rk_hw_base (MPP+RGA middleware) and sujit-168/rk_vaapi_driver.
-# librga prebuilt (aarch64) is pulled from airockchip/librga.
-echo "[*] Building Rockchip VAAPI driver inside chroot..."
-cat > "${ROOTFS_MNT}/tmp/build_vaapi.sh" << 'BUILD_VAAPI_EOF'
+# Install Rockchip VAAPI driver and modern MPP library.
+echo "[*] Installing Rockchip VAAPI driver and MPP runtime..."
+mkdir -p "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/dri"
+mkdir -p "${ROOTFS_MNT}/usr/local/lib"
+mkdir -p "${ROOTFS_MNT}/etc/ld.so.conf.d"
+
+if [ -f "${ROOT_DIR}/prebuilt/vaapi/rockchip_drv_video.so" ] && [ -f "${ROOT_DIR}/prebuilt/vaapi/librockchip_mpp.so.0" ]; then
+    echo "[+] Using verified prebuilt VAAPI driver and modern MPP library..."
+    cp "${ROOT_DIR}/prebuilt/vaapi/rockchip_drv_video.so" "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so"
+    chmod 0755 "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so"
+
+    cp "${ROOT_DIR}/prebuilt/vaapi/librockchip_mpp.so.0" "${ROOTFS_MNT}/usr/local/lib/librockchip_mpp.so.0"
+    chmod 0755 "${ROOTFS_MNT}/usr/local/lib/librockchip_mpp.so.0"
+    ln -sf librockchip_mpp.so.0 "${ROOTFS_MNT}/usr/local/lib/librockchip_mpp.so.1"
+    ln -sf librockchip_mpp.so.0 "${ROOTFS_MNT}/usr/local/lib/librockchip_mpp.so"
+
+    echo "/usr/local/lib" > "${ROOTFS_MNT}/etc/ld.so.conf.d/local.conf"
+    chroot "${ROOTFS_MNT}" ldconfig
+else
+    echo "[!] Prebuilts not found, compiling from source inside chroot..."
+    cat > "${ROOTFS_MNT}/tmp/build_vaapi.sh" << 'BUILD_VAAPI_EOF'
 #!/bin/bash
 set -e
 cd /tmp
-
-# Install build dependencies for VAAPI driver
-mkdir -p /var/cache/man
-if getent passwd man >/dev/null 2>&1; then
-    chown -R man:root /var/cache/man 2>/dev/null || true
-else
-    chown -R root:root /var/cache/man 2>/dev/null || true
-fi
-find /var/cache/man -type d -exec chmod 0755 {} + 2>/dev/null || true
-chmod g+s /var/cache/man 2>/dev/null || true
-find /var/cache/man -type f -exec chmod 0644 {} + 2>/dev/null || true
-
 apt-get install -y --no-install-recommends git build-essential libva-dev librockchip-mpp-dev pkg-config
-
-# Build rockchip VAAPI driver (woodyst/rockchip-vaapi: H.264, HEVC, VP9 Profile 0/2 + zero-copy DRM PRIME)
-echo "[*] Building rockchip_drv_video.so (woodyst/rockchip-vaapi)..."
 rm -rf /tmp/rockchip-vaapi
 git clone --depth=1 https://github.com/woodyst/rockchip-vaapi /tmp/rockchip-vaapi
 cd /tmp/rockchip-vaapi
-git apply << 'VAAPI_CHROMIUM_PATCH'
-diff --git a/src/rockchip_drv_video.c b/src/rockchip_drv_video.c
-index 08a31c6..22ac1a9 100644
---- a/src/rockchip_drv_video.c
-+++ b/src/rockchip_drv_video.c
-@@ -208,7 +208,11 @@ static VAStatus rk_Terminate(VADriverContextP ctx) {
-     }
-     for (int i = 0; i < MAX_CONTEXTS; i++) {
-         if (!d->contexts[i].used) continue;
--        if (d->contexts[i].mpp) mpp_destroy(d->contexts[i].mpp);
-+        if (d->contexts[i].mpp) {
-+            if (d->contexts[i].mpi && d->contexts[i].mpi->reset)
-+                d->contexts[i].mpi->reset(d->contexts[i].mpp);
-+            mpp_destroy(d->contexts[i].mpp);
-+        }
-     }
-     for (int i = 0; i < MAX_BUFFERS; i++) {
-         if (d->buffers[i].used) free(d->buffers[i].data);
-@@ -320,10 +324,21 @@ static VAStatus rk_QueryConfigAttributes(VADriverContextP ctx,
-     RKDriver *d = drv_from_ctx(ctx);
-     RKConfig *c = config_by_id(d, id);
-     if (!c) return VA_STATUS_ERROR_INVALID_CONFIG;
--    (void)attribs;
-     *profile = c->profile;
-     *entrypoint = c->entrypoint;
--    *n = 0;
-+
-+    int i = 0;
-+    attribs[i].type = VAConfigAttribRTFormat;
-+    attribs[i].value = VA_RT_FORMAT_YUV420 | VA_RT_FORMAT_YUV420_10;
-+    i++;
-+
-+    attribs[i].type = VAConfigAttribDecSliceMode;
-+    attribs[i].value = VA_DEC_SLICE_MODE_NORMAL;
-+    i++;
-+
-+    *n = i;
-+    LOG("QueryConfigAttributes: config=0x%x profile=%d entrypoint=%d returning %d attribs",
-+        id, *profile, *entrypoint, *n);
-     return VA_STATUS_SUCCESS;
- }
- 
-@@ -378,6 +393,11 @@ static VAStatus rk_CreateSurfaces(VADriverContextP ctx,
-                     surf->prime_fd   = dup_fd;
-                     surf->hstride    = (int)hs;
-                     surf->vstride    = (int)vs;
-+                    void *pbuf = mpp_buffer_get_ptr(buf);
-+                    if (pbuf) {
-+                        memset(pbuf, 0, (size_t)hs * vs);
-+                        memset((uint8_t *)pbuf + (size_t)hs * vs, 0x80, (size_t)hs * vs);
-+                    }
-                     LOG("CreateSurfaces: surface %ux%u placeholder prime_fd=%d",
-                         (unsigned)width, (unsigned)height, surf->prime_fd);
-                 } else {
-@@ -514,7 +534,10 @@ static VAStatus rk_DestroyContext(VADriverContextP ctx, VAContextID id) {
-     RKDriver *d = drv_from_ctx(ctx);
-     RKContext *c = context_by_id(d, id);
-     if (!c) return VA_STATUS_ERROR_INVALID_CONTEXT;
--    if (c->mpp) mpp_destroy(c->mpp);
-+    if (c->mpp) {
-+        if (c->mpi && c->mpi->reset) c->mpi->reset(c->mpp);
-+        mpp_destroy(c->mpp);
-+    }
-     memset(c, 0, sizeof(*c));
-     return VA_STATUS_SUCCESS;
- }
-@@ -676,6 +699,8 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
-     int  copy_h = fheight > 0 ? fheight : s->height;
-     int  src_hs = fhs > 0 ? fhs : copy_w;
-     int  src_vs = fvs > 0 ? fvs : copy_h;
-+    int  dst_hs = s->hstride ? s->hstride : copy_w;
-+    int  dst_vs = s->vstride ? s->vstride : copy_h;
-     bool i10    = MPP_FRAME_FMT_IS_YUV_10BIT(ffmt);
-     int  bpp    = i10 ? 2 : 1;
-     int  copied = 0;
-@@ -684,16 +709,17 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
-     if (src && dst) {
-         const uint8_t *sy = (const uint8_t *)src;
-         uint8_t       *dy = (uint8_t       *)dst;
-+        size_t line_bytes = (size_t)copy_w * bpp;
-         for (int r = 0; r < copy_h; r++)
--            memcpy(dy + (size_t)r * src_hs * bpp,
-+            memcpy(dy + (size_t)r * dst_hs * bpp,
-                    sy + (size_t)r * src_hs * bpp,
--                   (size_t)src_hs * bpp);
-+                   line_bytes);
-         const uint8_t *su = sy + (size_t)src_hs * src_vs * bpp;
--        uint8_t       *du = dy + (size_t)src_hs * src_vs * bpp;
-+        uint8_t       *du = dy + (size_t)dst_hs * dst_vs * bpp;
-         for (int r = 0; r < copy_h / 2; r++)
--            memcpy(du + (size_t)r * src_hs * bpp,
-+            memcpy(du + (size_t)r * dst_hs * bpp,
-                    su + (size_t)r * src_hs * bpp,
--                   (size_t)src_hs * bpp);
-+                   line_bytes);
-         copied = 1;
-     }
-     mpp_frame_deinit(&frame);
-@@ -703,8 +729,6 @@ static void assign_mpp_frame(MppFrame frame, RKContext *c, RKDriver *d)
-     s->fmt    = ffmt;
-     if (fwidth  > 0) s->width   = fwidth;
-     if (fheight > 0) s->height  = fheight;
--    if (fhs     > 0) s->hstride = fhs;
--    if (fvs     > 0) s->vstride = fvs;
-     s->decoded  = true;
-     pthread_cond_signal(&s->cond);
-     pthread_mutex_unlock(&s->lock);
-@@ -1444,8 +1468,8 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
-     LOG("QuerySurfaceAttributes: config=0x%x list=%s",
-         config, attrib_list ? "provided" : "NULL (query count)");
- 
--    /* Firefox calls this twice: first with NULL to get count, then with buffer */
--    const unsigned int n = 4;
-+    /* Callers query twice: first with NULL to get count, then with buffer */
-+    const unsigned int n = 7;
-     if (!attrib_list) {
-         *num_attribs = n;
-         return VA_STATUS_SUCCESS;
-@@ -1479,10 +1503,26 @@ static VAStatus rk_QuerySurfaceAttrs(VADriverContextP ctx, VAConfigID config,
-     attrib_list[3].type              = VASurfaceAttribMaxWidth;
-     attrib_list[3].flags             = VA_SURFACE_ATTRIB_GETTABLE;
-     attrib_list[3].value.type        = VAGenericValueTypeInteger;
--    attrib_list[3].value.value.i     = 7680;
-+    attrib_list[3].value.value.i     = 4096;
-+
-+    attrib_list[4].type              = VASurfaceAttribMaxHeight;
-+    attrib_list[4].flags             = VA_SURFACE_ATTRIB_GETTABLE;
-+    attrib_list[4].value.type        = VAGenericValueTypeInteger;
-+    attrib_list[4].value.value.i     = 4096;
-+
-+    /* Min resolution */
-+    attrib_list[5].type              = VASurfaceAttribMinWidth;
-+    attrib_list[5].flags             = VA_SURFACE_ATTRIB_GETTABLE;
-+    attrib_list[5].value.type        = VAGenericValueTypeInteger;
-+    attrib_list[5].value.value.i     = 16;
-+
-+    attrib_list[6].type              = VASurfaceAttribMinHeight;
-+    attrib_list[6].flags             = VA_SURFACE_ATTRIB_GETTABLE;
-+    attrib_list[6].value.type        = VAGenericValueTypeInteger;
-+    attrib_list[6].value.value.i     = 16;
- 
-     *num_attribs = n;
--    LOG("QuerySurfaceAttributes: returned %u attribs (NV12, P010, DRM_PRIME_2)", n);
-+    LOG("QuerySurfaceAttributes: returned %u attribs (NV12, P010, DRM_PRIME_2, 4096x4096)", n);
-     return VA_STATUS_SUCCESS;
- }
-VAAPI_CHROMIUM_PATCH
+for p in /tmp/vaapi-patches/*.patch; do
+    [ -f "$p" ] && git apply "$p" || true
+done
 make
 mkdir -p /usr/lib/aarch64-linux-gnu/dri
 cp rockchip_drv_video.so /usr/lib/aarch64-linux-gnu/dri/
 ldconfig
 cd /tmp
 rm -rf /tmp/rockchip-vaapi
-
-# Clean up build-only dependencies
 apt-get purge -y git build-essential libva-dev librockchip-mpp-dev pkg-config 2>/dev/null || true
 apt-get autoremove -y 2>/dev/null || true
-
-echo "[+] Rockchip VAAPI driver ready (H.264, HEVC, VP9)."
 BUILD_VAAPI_EOF
-chmod +x "${ROOTFS_MNT}/tmp/build_vaapi.sh"
-if chroot "${ROOTFS_MNT}" /tmp/build_vaapi.sh; then
-    echo "[*] VAAPI helper finished."
-else
-    echo "[!] Warning: VAAPI driver build failed; hardware video decode may be unavailable."
+    chmod +x "${ROOTFS_MNT}/tmp/build_vaapi.sh"
+    mkdir -p "${ROOTFS_MNT}/tmp/vaapi-patches"
+    cp "${ROOT_DIR}/overlay/vaapi-patches/"*.patch "${ROOTFS_MNT}/tmp/vaapi-patches/" 2>/dev/null || true
+    chroot "${ROOTFS_MNT}" /tmp/build_vaapi.sh || echo "[!] Warning: VAAPI driver build failed."
+    rm -rf "${ROOTFS_MNT}/tmp/build_vaapi.sh" "${ROOTFS_MNT}/tmp/vaapi-patches"
 fi
-rm -f "${ROOTFS_MNT}/tmp/build_vaapi.sh"
+
+# Install MPP and DMA heap udev rules
+if [ -f "${ROOT_DIR}/overlay/70-c20e-mpp.rules" ]; then
+    cp "${ROOT_DIR}/overlay/70-c20e-mpp.rules" "${ROOTFS_MNT}/etc/udev/rules.d/70-c20e-mpp.rules"
+    chmod 0644 "${ROOTFS_MNT}/etc/udev/rules.d/70-c20e-mpp.rules"
+fi
 
 # Keep VA-API environment deterministic across rebuilds.
 touch "${ROOTFS_MNT}/etc/environment"
@@ -1119,7 +977,7 @@ chroot "${ROOTFS_MNT}" plymouth-set-default-theme rkdebian 2>/dev/null || \
 # Add Chromium hardware acceleration flags.
 echo "[*] Adding Chromium acceleration flags..."
 mkdir -p "${ROOTFS_MNT}/etc/chromium.d"
-if [ "${FF_VAAPI_ENABLED}" = "true" ]; then
+if [ -f "${ROOTFS_MNT}/usr/lib/aarch64-linux-gnu/dri/rockchip_drv_video.so" ]; then
     mkdir -p "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1"
     cat > "${ROOTFS_MNT}/usr/share/chromium/extensions/block-av1/manifest.json" << 'BLOCK_AV1_MANIFEST'
 {
@@ -4479,6 +4337,12 @@ for policy in /sys/devices/system/cpu/cpufreq/policy*; do
     [ -f "\$policy/scaling_governor" ] || continue
     echo "\$CPU_GOVERNOR" > "\$policy/scaling_governor" 2>/dev/null || true
 done
+
+# Pin memory controller (DMC) to performance (920 MHz) to avoid scanout bus faults
+for d in /sys/class/devfreq/*dmc* /sys/class/devfreq/dmc; do
+    [ -d "\$d" ] || continue
+    echo performance > "\$d/governor" 2>/dev/null || true
+done
 RK_POWER_TUNE
 chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-power-tune.sh"
 
@@ -4497,6 +4361,18 @@ RemainAfterExit=yes
 WantedBy=multi-user.target
 RK_POWER_TUNE_UNIT
 chroot "${ROOTFS_MNT}" systemctl enable rk-power-tune.service
+
+# Pin DDR frequency service before display manager
+if [ -f "${ROOT_DIR}/overlay/c20e-dvfs-policy.sh" ] && \
+   [ -f "${ROOT_DIR}/overlay/c20e-dvfs-policy.service" ]; then
+    echo "[*] Installing DDR frequency pin service..."
+    cp "${ROOT_DIR}/overlay/c20e-dvfs-policy.sh" "${ROOTFS_MNT}/usr/local/sbin/c20e-dvfs-policy"
+    chmod 0755 "${ROOTFS_MNT}/usr/local/sbin/c20e-dvfs-policy"
+    cp "${ROOT_DIR}/overlay/c20e-dvfs-policy.service" \
+       "${ROOTFS_MNT}/etc/systemd/system/c20e-dvfs-policy.service"
+    chmod 0644 "${ROOTFS_MNT}/etc/systemd/system/c20e-dvfs-policy.service"
+    chroot "${ROOTFS_MNT}" systemctl enable c20e-dvfs-policy.service || true
+fi
 
 # Map power-profiles-daemon profiles to cpufreq behavior so Phosh's
 # "Balanced" and "Power Saver" switch directly controls CPU policy.

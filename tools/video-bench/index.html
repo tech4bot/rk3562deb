@@ -1,0 +1,21 @@
+<!doctype html><meta charset=utf-8><title>C20e video bench</title>
+<style>html,body{margin:0;background:#111;color:#eee;font:14px monospace}
+video{width:100vw;height:auto;display:block}#s{padding:4px}</style>
+<video id=v autoplay muted playsinline></video><div id=s>starting…</div>
+<script>
+const p = new URLSearchParams(location.search);
+const v = document.getElementById('v'), s = document.getElementById('s');
+v.src = p.get('f') || 't1080p30.mp4';
+v.loop = p.get('loop') !== '0';
+let last = {t: 0, total: 0, wall: performance.now()};
+setInterval(() => {
+  const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : {};
+  const now = performance.now();
+  const fps = ((q.totalVideoFrames - last.total) / ((now - last.wall) / 1000)).toFixed(1);
+  last = {t: v.currentTime, total: q.totalVideoFrames, wall: now};
+  const mem = performance.memory ? (performance.memory.usedJSHeapSize >> 20) + 'M' : '-';
+  s.textContent = `t=${v.currentTime.toFixed(1)} total=${q.totalVideoFrames} dropped=${q.droppedVideoFrames} fps=${fps}`;
+  fetch(`/log?t=${v.currentTime.toFixed(1)}&total=${q.totalVideoFrames}&dropped=${q.droppedVideoFrames}`
+      + `&corrupted=${q.corruptedVideoFrames}&fps=${fps}&mem=${mem}`);
+}, 1000);
+</script>
