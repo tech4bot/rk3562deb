@@ -799,6 +799,15 @@ tee "${ROOTFS_MNT}/etc/udev/rules.d/99-touchscreen-gsl3673.rules" > /dev/null <<
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="gsl3673", ENV{ID_INPUT}="1", ENV{ID_INPUT_TOUCHSCREEN}="1"
 UDEV_TS
 
+tee "${ROOTFS_MNT}/etc/udev/rules.d/65-joystick-fix.rules" > /dev/null << 'UDEV_JOYSTICK'
+# Remove unwanted js* device nodes created by tablet accelerometers
+SUBSYSTEM=="input", KERNEL=="js[0-9]*", ATTRS{name}=="mir3da", RUN+="/bin/rm -f /dev/input/%k"
+SUBSYSTEM=="input", KERNEL=="js[0-9]*", ATTRS{name}=="gsensor", RUN+="/bin/rm -f /dev/input/%k"
+
+# Ensure real gamepads/joysticks are accessible as /dev/input/js0
+SUBSYSTEM=="input", KERNEL=="js[1-9]*", ATTRS{name}!="mir3da", ATTRS{name}!="gsensor", SYMLINK+="input/js0"
+UDEV_JOYSTICK
+
 mkdir -p "${ROOTFS_MNT}/etc/X11/xorg.conf.d"
 cat > "${ROOTFS_MNT}/etc/X11/xorg.conf.d/40-gsl3673-touchscreen.conf" << 'XORG_TS'
 Section "InputClass"
@@ -4150,6 +4159,7 @@ if [ -f "${ROOT_DIR}/overlay/usb-mode-switch.sh" ] && [ -f "${ROOT_DIR}/overlay/
     chroot "${ROOTFS_MNT}" systemctl disable usb-force-host.service usb-otg-host.service >/dev/null 2>&1 || true
     chroot "${ROOTFS_MNT}" systemctl enable usb-role-manager.service
 fi
+
 
 # 10b. Front camera ISP setup service (s5k5e8 → rkisp → /dev/video23)
 if [ -f "${ROOT_DIR}/overlay/camera-isp-setup.sh" ] && \
