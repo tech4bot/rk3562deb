@@ -2896,6 +2896,61 @@ mkdir -p "${ROOTFS_MNT}/etc/systemd/system/multi-user.target.wants"
 ln -sf /etc/systemd/system/rk-powerkey-longpress.service \
     "${ROOTFS_MNT}/etc/systemd/system/multi-user.target.wants/rk-powerkey-longpress.service"
 
+cat > "${ROOTFS_MNT}/usr/local/sbin/rk-virtual-keyboard.py" << 'RK_VIRTUAL_KEYBOARD'
+#!/usr/bin/env python3
+"""Persistent virtual keyboard device for Wayland seats.
+Ensures phoc/wlroots advertises keyboard capability so Chromium
+and other Ozone/Wayland apps do not crash on text input.
+"""
+import signal
+import sys
+import time
+from evdev import UInput, ecodes as e
+
+keys = [
+    e.KEY_ESC, e.KEY_1, e.KEY_2, e.KEY_3, e.KEY_4, e.KEY_5, e.KEY_6, e.KEY_7, e.KEY_8, e.KEY_9, e.KEY_0,
+    e.KEY_MINUS, e.KEY_EQUAL, e.KEY_BACKSPACE, e.KEY_TAB, e.KEY_Q, e.KEY_W, e.KEY_E, e.KEY_R, e.KEY_T,
+    e.KEY_Y, e.KEY_U, e.KEY_I, e.KEY_O, e.KEY_P, e.KEY_LEFTBRACE, e.KEY_RIGHTBRACE, e.KEY_ENTER,
+    e.KEY_LEFTCTRL, e.KEY_A, e.KEY_S, e.KEY_D, e.KEY_F, e.KEY_G, e.KEY_H, e.KEY_J, e.KEY_K, e.KEY_L,
+    e.KEY_SEMICOLON, e.KEY_APOSTROPHE, e.KEY_GRAVE, e.KEY_LEFTSHIFT, e.KEY_BACKSLASH, e.KEY_Z, e.KEY_X,
+    e.KEY_C, e.KEY_V, e.KEY_B, e.KEY_N, e.KEY_M, e.KEY_COMMA, e.KEY_DOT, e.KEY_SLASH, e.KEY_RIGHTSHIFT,
+    e.KEY_LEFTALT, e.KEY_SPACE, e.KEY_CAPSLOCK, e.KEY_LEFTMETA
+]
+
+ui = UInput({e.EV_KEY: keys}, name="rk-virtual-keyboard")
+
+def handle_sig(sig, frame):
+    ui.close()
+    sys.exit(0)
+
+signal.signal(signal.SIGTERM, handle_sig)
+signal.signal(signal.SIGINT, handle_sig)
+
+while True:
+    time.sleep(3600)
+RK_VIRTUAL_KEYBOARD
+chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-virtual-keyboard.py"
+
+cat > "${ROOTFS_MNT}/etc/systemd/system/rk-virtual-keyboard.service" << 'RK_VIRTUAL_KEYBOARD_UNIT'
+[Unit]
+Description=Persistent Virtual Keyboard for Wayland Seat
+After=systemd-udev-settle.service local-fs.target
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/rk-virtual-keyboard.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+RK_VIRTUAL_KEYBOARD_UNIT
+
+mkdir -p "${ROOTFS_MNT}/etc/systemd/system/multi-user.target.wants"
+ln -sf /etc/systemd/system/rk-virtual-keyboard.service \
+    "${ROOTFS_MNT}/etc/systemd/system/multi-user.target.wants/rk-virtual-keyboard.service"
+
 echo "[*] Adding polkit rule for backlight control..."
 mkdir -p "${ROOTFS_MNT}/etc/polkit-1/rules.d"
 cat > "${ROOTFS_MNT}/etc/polkit-1/rules.d/49-backlight.rules" << 'BACKLIGHT_POLKIT'
