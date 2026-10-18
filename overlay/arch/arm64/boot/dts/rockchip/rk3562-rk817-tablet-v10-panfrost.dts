@@ -407,6 +407,36 @@
 &i2c0 {
 	status = "okay";
 
+	husb320: husb320@21 {
+		compatible = "hynetek,husb320";
+		reg = <0x21>;
+		interrupt-parent = <&gpio0>;
+		interrupts = <RK_PA7 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&husb320_int>;
+		vbus-supply = <&otg_switch>;
+		status = "okay";
+
+		connector {
+			compatible = "usb-c-connector";
+			label = "USB-C";
+			data-role = "dual";
+			power-role = "dual";
+			try-power-role = "sink";
+			typec-power-opmode = "1.5A";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					c20e_usbc_role_sw: endpoint {
+						remote-endpoint = <&c20e_dwc3_role_switch>;
+					};
+				};
+			};
+		};
+	};
+
 	rk817: pmic@20 {
 		compatible = "rockchip,rk817";
 		reg = <0x20>;
@@ -790,6 +820,12 @@
 		};
 	};
 
+	usb {
+		husb320_int: husb320-int {
+			rockchip,pins = <0 RK_PA7 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
 	wireless-bluetooth {
 		uart1_gpios: uart1-gpios {
 			rockchip,pins = <1 RK_PD3 RK_FUNC_GPIO &pcfg_pull_none>;
@@ -914,14 +950,16 @@
 	status = "okay";
 };
 
-&u2phy {
-	interrupts = <GIC_SPI 153 IRQ_TYPE_LEVEL_HIGH>;
-	status = "okay";
-};
-
 &u2phy_otg {
 	status = "okay";
-	vbus-supply = <&otg_switch>;
+	/*
+	 * NO vbus-supply here. VBUS (otg_switch -> RK817 5V boost) belongs to the
+	 * HUSB320 Type-C controller, which turns it on only in the Type-C SOURCE
+	 * state (the tablet powering an OTG adapter / unpowered hub). With the PHY
+	 * as a second consumer, every switch to USB host mode also drove 5V out --
+	 * even into a charging hub or a laptop that was itself supplying VBUS.
+	 * Pulling the cable in that state reset the board (2026-09-22).
+	 */
 };
 
 &uart1 {
@@ -942,7 +980,15 @@
 	phy-names = "usb2-phy";
 	snps,dis_u2_susphy_quirk;
 	snps,usb2-lpm-disable;
-	extcon = <&u2phy>;
+	usb-role-switch;
+	port {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		c20e_dwc3_role_switch: endpoint@0 {
+			reg = <0>;
+			remote-endpoint = <&c20e_usbc_role_sw>;
+		};
+	};
 };
 
 &video_phy {

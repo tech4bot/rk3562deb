@@ -198,6 +198,7 @@ enum charger_state {
 };
 
 enum rk817_charge_fields {
+	CHRG_BAT_TAB2,
 	BOOST_EN, OTG_EN, OTG_SLP_EN, CHRG_CLK_SEL,
 	CHRG_EN, CHRG_VOL_SEL, CHRG_CT_EN, CHRG_CUR_SEL,
 	USB_VLIM_EN, USB_VLIM_SEL, USB_ILIM_EN, USB_ILIM_SEL,
@@ -211,11 +212,12 @@ enum rk817_charge_fields {
 	USB_EXS, USB_EFF,
 	BAT_DIS_ILIM_STS, BAT_SYS_CMP_DLY, BAT_DIS_ILIM_EN,
 	BAT_DISCHRG_ILIM,
-	PLUG_IN_STS, SOC_REG0, SOC_REG1, SOC_REG2,
+	PLUG_IN_STS, SOC_REG0, SOC_REG1, SOC_REG2,  RK817B_FLAG,
 	F_MAX_FIELDS
 };
 
 static const struct reg_field rk817_charge_reg_fields[] = {
+	[CHRG_BAT_TAB2] = REG_FIELD(0x62, 7, 7),
 	[SOC_REG0] = REG_FIELD(0x9A, 0, 7),
 	[SOC_REG1] = REG_FIELD(0x9B, 0, 7),
 	[SOC_REG2] = REG_FIELD(0x9C, 0, 7),
@@ -262,6 +264,7 @@ static const struct reg_field rk817_charge_reg_fields[] = {
 	[BAT_DISCHRG_ILIM] = REG_FIELD(0xEC, 0, 2),
 	[PLUG_IN_STS] = REG_FIELD(0xf0, 6, 6),
 	[CHRG_CLK_SEL] = REG_FIELD(0xF3, 6, 6),
+	[RK817B_FLAG] = REG_FIELD(0xFF, 0, 0),
 };
 
 struct charger_platform_data {
@@ -303,7 +306,6 @@ struct rk817_charger {
 	struct delayed_work usb_work;
 	struct delayed_work host_work;
 	struct delayed_work discnt_work;
-	struct delayed_work redet_work;
 	struct delayed_work irq_work;
 	struct notifier_block bc_nb;
 	struct notifier_block cable_cg_nb;
@@ -332,13 +334,10 @@ struct rk817_charger {
 	u8 otg_slp_state;
 	u8 plugin_trigger;
 	u8 plugout_trigger;
-	u8 redet_retry;
 	int plugin_irq;
 	int plugout_irq;
+	bool is_rk817b;
 };
-
-#define RK817_EXTCON_RECHECK_MS		500
-#define RK817_EXTCON_RECHECK_MAX	20
 
 static enum power_supply_property rk817_ac_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
@@ -488,6 +487,13 @@ static int rk817_charge_field_write(struct rk817_charger *charge,
 	return regmap_field_write(charge->rmap_fields[field_id], val);
 }
 
+static int rk817_charge_field_force_write(struct rk817_charger *charge,
+					  enum rk817_charge_fields field_id,
+					  unsigned int val)
+{
+	return regmap_field_force_write(charge->rmap_fields[field_id], val);
+}
+
 static int rk817_charge_get_otg_state(struct rk817_charger *charge)
 {
 	return regulator_is_enabled(charge->otg5v_rdev);
@@ -508,13 +514,8 @@ static void rk817_charge_otg_disable(struct rk817_charger *charge)
 	int ret;
 
 	ret = regulator_disable(charge->otg5v_rdev);
-
-	if (ret) {
+	if (ret)
 		DBG("disable otg5v failed:%d\n", ret);
-		return;
-	}
-
-	return;
 }
 
 static void rk817_charge_otg_enable(struct rk817_charger *charge)
@@ -522,13 +523,8 @@ static void rk817_charge_otg_enable(struct rk817_charger *charge)
 	int ret;
 
 	ret = regulator_enable(charge->otg5v_rdev);
-
-	if (ret) {
+	if (ret)
 		DBG("enable otg5v failed:%d\n", ret);
-		return;
-	}
-
-	return;
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -631,9 +627,12 @@ static void rk817_charge_set_chrg_voltage(struct rk817_charger *charge,
 		dev_err(charge->dev, "the charge voltage is error!\n");
 	} else {
 		voltage = (chrg_vol - 4100) / 50;
-		rk817_charge_field_write(charge,
-					 CHRG_VOL_SEL,
-					 CHRG_VOL_4100MV + voltage);
+		if (charge->is_rk817b)
+			rk817_charge_field_force_write(charge, CHRG_BAT_TAB2, 0);
+		rk817_charge_field_force_write(charge,
+					       CHRG_VOL_SEL,
+					       CHRG_VOL_4100MV + voltage);
+
 	}
 }
 
@@ -1022,6 +1021,23 @@ static void rk817_charge_host_evt_worker(struct work_struct *work)
 	/* Determine cable/charger type */
 	if (extcon_get_state(edev, EXTCON_USB_VBUS_EN) > 0) {
 		DBG("receive type-c notifier event: OTG ON...\n");
+		/*
+		 * C20e: never drive VBUS while something else is already
+		 * supplying it. The USB PHY raises VBUS_EN whenever the port
+		 * enters host mode, including host mode behind a charging hub
+		 * or towards a laptop -- both of which power VBUS themselves.
+		 * Enabling the 5V boost then puts two supplies on one line;
+		 * pulling the cable in that state reset the board (2026-09-22).
+		 * PLUG_IN_STS is the PMIC's own VBUS-present detect, read
+		 * before our boost is on so it can only see an external supply.
+		 * An OTG adapter (no external power) still gets 5V.
+		 */
+		if (!charge->otg_in &&
+		    rk817_charge_get_plug_in_status(charge) > 0) {
+			dev_info(charge->dev,
+				 "USB host mode with external VBUS present: OTG 5V stays off\n");
+			return;
+		}
 		if (charge->dc_in && charge->pdata->power_dc2otg) {
 			if (charge->otg_in)
 				rk817_charge_set_otg_state(charge,
@@ -1046,7 +1062,6 @@ static void rk817_charger_evt_worker(struct work_struct *work)
 	enum charger_t charger = USB_TYPE_UNKNOWN_CHARGER;
 	static const char * const event[] = {"UN", "NONE", "USB",
 					     "AC", "CDP1.5A"};
-	bool vbus_present;
 
 	/* Determine cable/charger type */
 	if (extcon_get_state(edev, EXTCON_CHG_USB_SDP) > 0)
@@ -1060,69 +1075,20 @@ static void rk817_charger_evt_worker(struct work_struct *work)
 		DBG("receive type-c notifier event: %s...\n",
 		    event[charger]);
 		charge->usb_charger = charger;
-		charge->redet_retry = 0;
 		rk817_charge_set_chrg_param(charge, charger);
-		return;
 	}
-
-	/*
-	 * BC1.2 classification can lag behind plug-in/boot transitions.
-	 * Re-check for a while before falling back to a conservative limit.
-	 */
-	vbus_present = rk817_charge_get_plug_in_status(charge) > 0;
-	if (vbus_present) {
-		if (charge->redet_retry < RK817_EXTCON_RECHECK_MAX) {
-			charge->redet_retry++;
-			queue_delayed_work(charge->usb_charger_wq,
-					   &charge->redet_work,
-					   msecs_to_jiffies(RK817_EXTCON_RECHECK_MS));
-		} else {
-			/*
-			 * Keep charging robust when DCP detection never arrives
-			 * while VBUS is physically present.
-			 */
-			DBG("type-c charger type unknown too long, fallback to AC\n");
-			charge->redet_retry = 0;
-			charge->usb_charger = USB_TYPE_AC_CHARGER;
-			rk817_charge_set_chrg_param(charge, USB_TYPE_AC_CHARGER);
-		}
-	} else {
-		charge->redet_retry = 0;
-	}
-}
-
-static void rk817_charge_redet_worker(struct work_struct *work)
-{
-	struct rk817_charger *charge = container_of(work,
-			struct rk817_charger, redet_work.work);
-
-	queue_delayed_work(charge->usb_charger_wq, &charge->usb_work, 0);
 }
 
 static void rk817_charge_discnt_evt_worker(struct work_struct *work)
 {
 	struct rk817_charger *charge = container_of(work,
 			struct rk817_charger, discnt_work.work);
-	bool vbus_present;
 
-	if (extcon_get_state(charge->cable_edev, EXTCON_USB) != 0)
-		return;
+	if (extcon_get_state(charge->cable_edev, EXTCON_USB) == 0) {
+		DBG("receive type-c notifier event: DISCNT...\n");
 
-	DBG("receive type-c notifier event: DISCNT...\n");
-	vbus_present = rk817_charge_get_plug_in_status(charge) > 0;
-	if (!vbus_present) {
 		rk817_charge_set_chrg_param(charge, USB_TYPE_NONE_CHARGER);
-		return;
 	}
-
-	/*
-	 * Keep charger current profile until BC1.2/type-C settles, then
-	 * re-evaluate instead of forcing low-current immediately.
-	 */
-	queue_delayed_work(charge->usb_charger_wq, &charge->usb_work,
-			   msecs_to_jiffies(20));
-	queue_delayed_work(charge->usb_charger_wq, &charge->redet_work,
-			   msecs_to_jiffies(RK817_EXTCON_RECHECK_MS));
 }
 
 static void rk817_charge_bc_evt_worker(struct work_struct *work)
@@ -1306,22 +1272,37 @@ static int rk817_charge_usb_init(struct rk817_charger *charge)
 
 		DBG("register typec extcon evt notifier\n");
 	} else {
-		/* No extcon: rely on PMIC plug-in/plug-out IRQs and
-		 * PLUG_IN_STS register for charger detection.
-		 * OTG was disabled in pre_init so PMIC can sense VBUS. */
-		if (rk817_charge_get_plug_in_status(charge)) {
-			DBG("pmic: charger present at init\n");
-			rk817_charge_set_chrg_param(charge,
-						    USB_TYPE_AC_CHARGER);
-		} else {
-			/* No charger: enable OTG for USB host */
-			DBG("pmic: no charger, enabling OTG for USB host\n");
-			rk817_charge_otg_enable(charge);
-			rk817_charge_field_write(charge, OTG_EN,
-						 OTG_ENABLE);
-			rk817_charge_set_otg_in(charge, ONLINE);
+		INIT_DELAYED_WORK(&charge->usb_work,
+				  rk817_charge_bc_evt_worker);
+		charge->bc_nb.notifier_call = rk817_charge_bc_evt_notifier;
+		ret = rk_bc_detect_notifier_register(&charge->bc_nb, &bc_type);
+		if (ret) {
+			dev_err(dev, "failed to register notifier for bc\n");
+			return -EINVAL;
+	}
+
+		switch (bc_type) {
+		case USB_BC_TYPE_DISCNT:
+			charger = USB_TYPE_NONE_CHARGER;
+			break;
+		case USB_BC_TYPE_SDP:
+		case USB_BC_TYPE_CDP:
+			charger = USB_TYPE_USB_CHARGER;
+			break;
+		case USB_BC_TYPE_DCP:
+			charger = USB_TYPE_AC_CHARGER;
+			break;
+		default:
+			charger = USB_TYPE_NONE_CHARGER;
+			break;
 		}
-		DBG("using pmic plug-in detection (no extcon)\n");
+
+		charge->usb_charger = charger;
+		if (charge->dc_charger != DC_TYPE_NONE_CHARGER)
+			rk817_charge_set_chrg_param(charge,
+						    charge->usb_charger);
+
+		DBG("register bc evt notifier\n");
 	}
 
 	return 0;
@@ -1335,6 +1316,7 @@ static void rk817_charge_pre_init(struct rk817_charger *charge)
 	charge->min_input_voltage = charge->pdata->min_input_voltage;
 	charge->chrg_finish_cur = charge->pdata->chrg_finish_cur;
 	charge->chrg_term_mode = charge->pdata->chrg_term_mode;
+	charge->is_rk817b = rk817_charge_field_read(charge, RK817B_FLAG);
 
 	rk817_charge_set_input_voltage(charge, charge->min_input_voltage);
 
@@ -1343,13 +1325,13 @@ static void rk817_charge_pre_init(struct rk817_charger *charge)
 
 	rk817_charge_set_chrg_finish_condition(charge);
 
-	/* Disable OTG (VBUS output) so the PMIC can detect external charger
-	 * VBUS. OTG will be re-enabled in usb_init if no charger is present. */
 	if (rk817_charge_get_otg_state(charge))
 		rk817_charge_otg_disable(charge);
 	rk817_charge_field_write(charge, OTG_EN, OTG_DISABLE);
 	rk817_charge_set_otg_in(charge, OFFLINE);
-	rk817_charge_sys_can_sd_disable(charge);
+
+	if (!charge->pdata->gate_function_disable)
+		rk817_charge_sys_can_sd_disable(charge);
 	rk817_charge_usb_to_sys_enable(charge);
 	rk817_charge_enable_charge(charge);
 
@@ -1521,44 +1503,14 @@ static void rk817_charge_irq_delay_work(struct work_struct *work)
 	if (charge->plugin_trigger) {
 		DBG("pmic: plug in\n");
 		charge->plugin_trigger = 0;
-		if (charge->pdata->extcon) {
+		if (charge->pdata->extcon)
 			queue_delayed_work(charge->usb_charger_wq, &charge->usb_work,
 					   msecs_to_jiffies(10));
-		} else {
-			/* No extcon: disable OTG and start charging */
-			rk817_charge_otg_disable(charge);
-			rk817_charge_field_write(charge, OTG_EN,
-						 OTG_DISABLE);
-			rk817_charge_set_otg_in(charge, OFFLINE);
-			rk817_charge_set_chrg_param(charge,
-						    USB_TYPE_AC_CHARGER);
-		}
 	} else if (charge->plugout_trigger) {
 		DBG("pmic: plug out\n");
 		charge->plugout_trigger = 0;
-		if (charge->pdata->extcon) {
-			/*
-			 * With extcon, plug-out IRQ can be transient during
-			 * role/BC1.2 updates. Re-evaluate instead of forcing
-			 * low-current profile immediately.
-			 */
-			if (!rk817_charge_get_plug_in_status(charge)) {
-				charge->redet_retry = 0;
-				rk817_charge_set_chrg_param(charge, USB_TYPE_NONE_CHARGER);
-			}
-			queue_delayed_work(charge->usb_charger_wq, &charge->usb_work,
-					   msecs_to_jiffies(20));
-			queue_delayed_work(charge->usb_charger_wq, &charge->redet_work,
-					   msecs_to_jiffies(RK817_EXTCON_RECHECK_MS));
-		} else {
-			rk817_charge_set_chrg_param(charge, USB_TYPE_NONE_CHARGER);
-			rk817_charge_set_chrg_param(charge, DC_TYPE_NONE_CHARGER);
-			/* Re-enable OTG for USB host */
-			rk817_charge_otg_enable(charge);
-			rk817_charge_field_write(charge, OTG_EN,
-						 OTG_ENABLE);
-			rk817_charge_set_otg_in(charge, ONLINE);
-		}
+		rk817_charge_set_chrg_param(charge, USB_TYPE_NONE_CHARGER);
+		rk817_charge_set_chrg_param(charge, DC_TYPE_NONE_CHARGER);
 	} else {
 		DBG("pmic: unknown irq\n");
 	}
@@ -1628,7 +1580,6 @@ static int rk817_charge_init_irqs(struct rk817_charger *charge)
 	charge->plugout_irq = plug_out_irq;
 
 	INIT_DELAYED_WORK(&charge->irq_work, rk817_charge_irq_delay_work);
-	INIT_DELAYED_WORK(&charge->redet_work, rk817_charge_redet_worker);
 
 	return 0;
 }
@@ -1716,11 +1667,8 @@ static int rk817_charge_probe(struct platform_device *pdev)
 	}
 
 	if (charge->pdata->extcon) {
-		queue_delayed_work(charge->usb_charger_wq, &charge->host_work, 0);
-		queue_delayed_work(charge->usb_charger_wq, &charge->usb_work,
-				   msecs_to_jiffies(100));
-		queue_delayed_work(charge->usb_charger_wq, &charge->redet_work,
-				   msecs_to_jiffies(RK817_EXTCON_RECHECK_MS));
+		schedule_delayed_work(&charge->host_work, 0);
+		schedule_delayed_work(&charge->usb_work, 0);
 	}
 
 	rk817_chage_debug(charge);
@@ -1731,7 +1679,6 @@ irq_fail:
 	if (charge->pdata->extcon) {
 		cancel_delayed_work_sync(&charge->host_work);
 		cancel_delayed_work_sync(&charge->discnt_work);
-		cancel_delayed_work_sync(&charge->redet_work);
 	}
 
 	cancel_delayed_work_sync(&charge->usb_work);
@@ -1811,7 +1758,6 @@ static void rk817_charger_shutdown(struct platform_device *dev)
 	if (charge->pdata->extcon) {
 		cancel_delayed_work_sync(&charge->host_work);
 		cancel_delayed_work_sync(&charge->discnt_work);
-		cancel_delayed_work_sync(&charge->redet_work);
 	}
 
 	rk817_charge_set_otg_state(charge, USB_OTG_POWER_OFF);

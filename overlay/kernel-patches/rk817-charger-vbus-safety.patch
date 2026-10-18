@@ -1,0 +1,28 @@
+diff --git a/drivers/power/supply/rk817_charger.c b/drivers/power/supply/rk817_charger.c
+index d063d61ce27d..bce460cece07 100644
+--- a/drivers/power/supply/rk817_charger.c
++++ b/drivers/power/supply/rk817_charger.c
+@@ -1021,6 +1021,23 @@ static void rk817_charge_host_evt_worker(struct work_struct *work)
+ 	/* Determine cable/charger type */
+ 	if (extcon_get_state(edev, EXTCON_USB_VBUS_EN) > 0) {
+ 		DBG("receive type-c notifier event: OTG ON...\n");
++		/*
++		 * C20e: never drive VBUS while something else is already
++		 * supplying it. The USB PHY raises VBUS_EN whenever the port
++		 * enters host mode, including host mode behind a charging hub
++		 * or towards a laptop -- both of which power VBUS themselves.
++		 * Enabling the 5V boost then puts two supplies on one line;
++		 * pulling the cable in that state reset the board (2026-09-22).
++		 * PLUG_IN_STS is the PMIC's own VBUS-present detect, read
++		 * before our boost is on so it can only see an external supply.
++		 * An OTG adapter (no external power) still gets 5V.
++		 */
++		if (!charge->otg_in &&
++		    rk817_charge_get_plug_in_status(charge) > 0) {
++			dev_info(charge->dev,
++				 "USB host mode with external VBUS present: OTG 5V stays off\n");
++			return;
++		}
+ 		if (charge->dc_in && charge->pdata->power_dc2otg) {
+ 			if (charge->otg_in)
+ 				rk817_charge_set_otg_state(charge,

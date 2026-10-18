@@ -592,7 +592,6 @@ build_kernel() {
             local pmic_overlay_files=(
                 "drivers/mfd/rk808.c"
                 "drivers/power/supply/rk817_battery.c"
-                "drivers/power/supply/rk817_charger.c"
             )
 
             if [ "${RKDEBIAN_KEEP_OVERLAY_PMIC_PATCHES:-0}" = "1" ]; then
@@ -637,6 +636,22 @@ build_kernel() {
             echo "[*] Applying RK817 boot OCV calibration fix..."
             if ! git apply --whitespace=nowarn "${rk817_boot_ocv_patch}"; then
                 echo "[-] Error: failed to apply RK817 boot OCV calibration fix."
+                exit 1
+            fi
+        fi
+    fi
+
+    # RK817 charger VBUS presence safety fix:
+    # prevent enabling OTG 5V boost when external VBUS is already present,
+    # avoiding reverse-current / overvoltage shutdown reboot when connecting charger.
+    local rk817_charger_safety_patch="${ROOT_DIR}/overlay/kernel-patches/rk817-charger-vbus-safety.patch"
+    if [ -f "${rk817_charger_safety_patch}" ]; then
+        if grep -q "USB host mode with external VBUS present" drivers/power/supply/rk817_charger.c; then
+            echo "[*] RK817 charger VBUS safety fix already present."
+        else
+            echo "[*] Applying RK817 charger VBUS safety fix..."
+            if ! git apply --whitespace=nowarn "${rk817_charger_safety_patch}"; then
+                echo "[-] Error: failed to apply RK817 charger VBUS safety fix."
                 exit 1
             fi
         fi
