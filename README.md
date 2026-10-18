@@ -48,7 +48,8 @@ The resulting image is written to an SD card. Insert it and power on — the tab
 | **Bluetooth** | ✅ Full |
 | **Speaker / Audio output** | ✅ Full |
 | **Microphone** | ✅ Full |
-| **3D Acceleration** | ⚠️ Partial (default image uses `mali` vendor stack; `panfrost` is an optional build profile) |
+| **3D Acceleration** | ✅ Full (Mesa Panfrost open-source driver default; Wayland native compositing) |
+| **Hardware Video Decode** | ✅ Full (Rockchip MPP / VA-API H.264, HEVC, VP9 hardware decoding in Chromium) |
 | **NPU (RKLLM / rknn-llm)** | ✅ Active (RK3562 supports one NPU core, `num_npu_core=1`) |
 | **Accelerometer** | ✅ Full (SC7A20 / DA223) |
 | **Flashlight (rear LED)** | ✅ Full (native Phosh top-menu torch toggle + brightness control via `rk-flashlightctl`) |
@@ -60,14 +61,13 @@ The resulting image is written to an SD card. Insert it and power on — the tab
 | **SD card boot** | ✅ Full |
 | **USB OTG** | ✅ Full |
 
-> **Note:** the public pre-release image linked above is built with `RKDEBIAN_GPU_STACK=mali` unless explicitly stated otherwise.
+> **Note:** Modern builds default to the open-source **Panfrost** GPU stack (`RKDEBIAN_GPU_STACK=panfrost`) with full Wayland compositing, rockchip-vaapi hardware video acceleration, and DDR stability pinning.
 
 ## Default Installed Apps
 
 | App | Notes |
 |-----|-------|
-| **Chromium** | Hardware-accelerated browser with Rockchip VPU 1080p60 decode & camera support |
-| **FreeTube** | Installed via Flatpak from Flathub by default (disable with `RKDEBIAN_PREINSTALL_FREETUBE=0` for smaller images) |
+| **Chromium** | Hardware-accelerated browser with Rockchip VPU/VA-API decode, touch OSK auto-dismiss & camera support |
 | **Drawing** | Touch-friendly paint app (installed when available on mirror) |
 | **Snapshot** | Camera app (installed when available on mirror) |
 | **Dolphin** | File manager |
@@ -76,7 +76,10 @@ The resulting image is written to an SD card. Insert it and power on — the tab
 | **Gedit** | Text editor |
 | **Pavucontrol** | Audio controls |
 | **Terminal** | `kgx` preferred, `gnome-terminal` fallback |
-| **Flatpak + Flathub** | Enabled by default for app installs |
+| **Flatpak + Flathub** | Enabled by default for user app installs |
+| **Docker / Containers** | Kernel container support enabled (`CONFIG_BINFMT_MISC`, cgroups v2) |
+
+> **Note on browsers & media apps:** To keep the base image lightweight, clean, and fast to flash, **Firefox** and **FreeTube** are not preinstalled by default. Chromium provides full hardware video decoding out of the box, and FreeTube can be installed on demand from Flathub via Discover or with `RKDEBIAN_PREINSTALL_FREETUBE=1`.
 
 ## NPU LLM (RK3562)
 
@@ -243,10 +246,10 @@ These variables can be set before running `build.sh` to control build behaviour:
 | `ROOTFS_MIN_MB` | `2560` | Minimum rootfs image size in MiB when using `auto` sizing. |
 | `RKDEBIAN_DISPLAY_SERVER` | `wayland` | Session backend preference for desktop stack selection (`wayland`, `x11`, or `auto`). Phosh images use Wayland by default. |
 | `RKDEBIAN_UI_SESSION` | `phosh` | UI session to auto-login in LightDM. Current supported value: `phosh`. |
-| `RKDEBIAN_GPU_STACK` | `mali` | GPU stack to build for: `mali` (vendor userspace) or `panfrost` (Mesa/Panfrost, no `libmali`). |
+| `RKDEBIAN_GPU_STACK` | `panfrost` | GPU stack to build for: `panfrost` (default, Mesa/Panfrost open-source driver) or `mali` (legacy vendor userspace). |
 | `RKDEBIAN_CPU_GOVERNOR` | `performance` | Baseline CPU governor used at boot and as the default mapping for Phosh `balanced` mode. |
 | `RKDEBIAN_MALI_GBM_PROVIDER` | `vendor` | Mali-only option: `vendor` keeps `mali/libgbm.so.1` from the blob package (default), `debian` overrides it to Debian `libgbm.so.1` for compatibility testing. |
-| `RKDEBIAN_PREINSTALL_FREETUBE` | `1` | Set to `0` to skip FreeTube preinstall and significantly reduce image size. |
+| `RKDEBIAN_PREINSTALL_FREETUBE` | `0` | Set to `1` to preinstall FreeTube Flatpak (adds ~300 MB to rootfs). Default is `0`. |
 | `RKDEBIAN_MINIMIZE_IMAGE` | `0` | Set to `1` for aggressive size reduction (prunes non-English locales plus `/usr/share/doc`, `/usr/share/help`, `/usr/share/man`, `/usr/share/info`, and unused Flatpak objects). |
 
 ### Kernel
@@ -298,11 +301,14 @@ RKDEBIAN_CPU_GOVERNOR=schedutil ./build.sh all
 # Mali stack with Debian libgbm override (only for compatibility testing)
 RKDEBIAN_MALI_GBM_PROVIDER=debian ./build.sh all --ui-session=phosh --gpu-stack=mali --force-clean-rootfs
 
-# Size-focused build for easier GitHub uploads
-RKDEBIAN_FORCE_CLEAN_ROOTFS=1 RKDEBIAN_MINIMIZE_IMAGE=1 RKDEBIAN_PREINSTALL_FREETUBE=0 ./build.sh all
+# Standard lightweight build (FreeTube omitted by default)
+./build.sh all
 
-# Size-focused build while keeping default FreeTube preinstall enabled
-RKDEBIAN_FORCE_CLEAN_ROOTFS=1 RKDEBIAN_MINIMIZE_IMAGE=1 RKDEBIAN_PREINSTALL_FREETUBE=1 ./build.sh all
+# Size-focused build for fast downloads / uploads
+RKDEBIAN_FORCE_CLEAN_ROOTFS=1 RKDEBIAN_MINIMIZE_IMAGE=1 ./build.sh all
+
+# Optional: build with FreeTube preinstalled
+RKDEBIAN_FORCE_CLEAN_ROOTFS=1 RKDEBIAN_PREINSTALL_FREETUBE=1 ./build.sh all
 ```
 
 When changing `RKDEBIAN_UI_SESSION` or `RKDEBIAN_GPU_STACK`, use `--force-clean-rootfs` to avoid stale package carry-over.
@@ -499,6 +505,14 @@ Rockchip MPP is licensed under the Apache 2.0 License.
 ### Seekwave Wi-Fi / Bluetooth
 
 The Wi-Fi and Bluetooth driver source in `overlay/drivers/net/wireless/ea6621q/` and firmware blobs in `overlay/firmware/` and `wifi/` are provided by **Seekwave Technology Co. Ltd**. The driver is released by the vendor under the GNU General Public License v2.0 (GPL-2.0).
+
+---
+
+## Contributors
+
+- **[@tech4bot](https://github.com/tech4bot)** — Project creator & maintainer
+- **[@drhaynes](https://github.com/drhaynes)** (David Haynes) — Panfrost GPU hardware acceleration research, driver clock fixes, and boot stability ([#11](https://github.com/tech4bot/rk3562deb/issues/11))
+- **[@ethersloth](https://github.com/ethersloth)** (Gregory Whitlock) — Rockchip VA-API Chromium hardware video decode patches, DDR stability analysis, and playback bench ([ethersloth/c20e-rk3562-linux](https://github.com/ethersloth/c20e-rk3562-linux))
 
 ---
 
