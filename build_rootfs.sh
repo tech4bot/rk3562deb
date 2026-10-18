@@ -1384,6 +1384,7 @@ PROFILE_EOF
 cat > "${ROOTFS_MNT}/etc/fstab" << 'FSTAB'
 # <file system>  <mount point>  <type>  <options>        <dump>  <pass>
 PARTUUID=c0ffee11-2233-4455-6677-8899aabbccdd  /  ext4  defaults,noatime  0  1
+binfmt_misc /proc/sys/fs/binfmt_misc binfmt_misc defaults 0 0
 FSTAB
 
 # 9. Configure display manager autologin
@@ -4149,16 +4150,8 @@ exec /usr/local/sbin/rk-audio-resume.sh "$@"
 RK_AUDIO_RESUME_SLEEP
 chmod +x "${ROOTFS_MNT}/lib/systemd/system-sleep/rk-audio-resume"
 
-# 10. USB role manager service (OTG host + charging)
-if [ -f "${ROOT_DIR}/overlay/usb-mode-switch.sh" ] && [ -f "${ROOT_DIR}/overlay/usb-role-manager.service" ]; then
-    echo "[*] Installing USB role manager service..."
-    cp "${ROOT_DIR}/overlay/usb-mode-switch.sh" "${ROOTFS_MNT}/usr/local/bin/usb-mode-switch.sh"
-    chmod +x "${ROOTFS_MNT}/usr/local/bin/usb-mode-switch.sh"
-    cp "${ROOT_DIR}/overlay/usb-role-manager.service" "${ROOTFS_MNT}/etc/systemd/system/usb-role-manager.service"
-    # Clean up deprecated services that caused one-sided behavior.
-    chroot "${ROOTFS_MNT}" systemctl disable usb-force-host.service usb-otg-host.service >/dev/null 2>&1 || true
-    chroot "${ROOTFS_MNT}" systemctl enable usb-role-manager.service
-fi
+# 10. Clean up deprecated USB role switch services (kernel handles OTG/charging natively)
+chroot "${ROOTFS_MNT}" systemctl disable usb-role-manager.service usb-force-host.service usb-otg-host.service >/dev/null 2>&1 || true
 
 
 # 10b. Front camera ISP setup service (s5k5e8 → rkisp → /dev/video23)
