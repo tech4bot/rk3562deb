@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config DRM_MSDISP
+	tristate "MacroSilicon MS91xx USB Display DRM Driver"
+	depends on DRM && USB
+	select DRM_KMS_HELPER
+	default m
+	help
+	  DRM driver for MacroSilicon MS9132 / MS9133 / MS9135 / MS912x
+	  USB display chips.
