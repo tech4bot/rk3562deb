@@ -1,0 +1,66 @@
+diff --git a/dkms-install.sh b/dkms-install.sh
+index 2a46cf9..30c3d8c 100755
+--- a/dkms-install.sh
++++ b/dkms-install.sh
+@@ -15,7 +15,7 @@ KVER="${1:-$(uname -r)}"
+ echo "=== Installing msdisp driver version $VERSION for kernel $KVER ==="
+ 
+ # Clean up any obsolete/stale versions of msdisp in DKMS
+-for v in $(dkms status msdisp 2>/dev/null | awk -F'[,/]' '{print $2}' | sort -u); do
++for v in $(dkms status msdisp 2>/dev/null | awk -F'[,/:]' '$2 != "" {print $2}' | tr -d ' ' | sort -u); do
+     echo "Purging previous msdisp version $v from DKMS..."
+     dkms remove msdisp/$v --all 2>/dev/null || true
+     if [ "$v" != "$VERSION" ]; then
+@@ -33,7 +33,7 @@ echo "Registering msdisp/$VERSION in DKMS..."
+ dkms add msdisp/$VERSION
+ 
+ echo "Building and signing msdisp/$VERSION for $KVER..."
+-dkms install msdisp/$VERSION -k "$KVER"
++dkms install msdisp/$VERSION -k "$KVER" --force
+ 
+ # Reload kernel modules if device is attached
+ echo "Reloading kernel modules..."
+@@ -52,6 +52,16 @@ modprobe -r usbdisp_drm 2>/dev/null || true
+ modprobe usbdisp_drm 2>/dev/null || true
+ modprobe usbdisp_usb 2>/dev/null || true
+ 
++# Ensure all platform devices are bound to msdisp_plat
++for dev in /sys/bus/platform/devices/msdisp_plat.*; do
++    if [ -e "$dev" ]; then
++        dev_name=$(basename "$dev")
++        if [ ! -e "$dev/driver" ]; then
++            echo "$dev_name" > /sys/bus/platform/drivers/msdisp_plat/bind 2>/dev/null || true
++        fi
++    fi
++done
++
+ LOADED_VER=$(cat /sys/module/usbdisp_drm/version 2>/dev/null || echo "not loaded")
+ if [ "$LOADED_VER" = "$VERSION" ]; then
+     echo "=== msdisp $VERSION successfully loaded into running kernel! ==="
+diff --git a/dkms-remove.sh b/dkms-remove.sh
+index 49e4442..296c757 100755
+--- a/dkms-remove.sh
++++ b/dkms-remove.sh
+@@ -8,7 +8,7 @@ if [ "$EUID" -ne 0 ]; then
+ fi
+ 
+ echo "=== Uninstalling msdisp driver from DKMS ==="
+-for v in $(dkms status msdisp 2>/dev/null | awk -F'[,/]' '{print $2}' | sort -u); do
++for v in $(dkms status msdisp 2>/dev/null | awk -F'[,/:]' '$2 != "" {print $2}' | tr -d ' ' | sort -u); do
+     echo "Removing msdisp version $v from DKMS..."
+     dkms remove msdisp/$v --all 2>/dev/null || true
+     rm -rf "/usr/src/msdisp-$v"
+diff --git a/drm/msdisp_drm_drv.c b/drm/msdisp_drm_drv.c
+index d25e423..f092aef 100644
+--- a/drm/msdisp_drm_drv.c
++++ b/drm/msdisp_drm_drv.c
+@@ -37,8 +37,10 @@
+ #elif __has_include(<drm/drm_client_setup.h>)
+ #include <drm/drm_client_setup.h>
+ #endif
+-#else
++#elif __has_include(<drm/drm_fbdev_generic.h>)
+ #include <drm/drm_fbdev_generic.h>
++#else
++#include <drm/drm_fb_helper.h>
+ #endif

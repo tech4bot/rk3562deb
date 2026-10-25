@@ -717,6 +717,8 @@ build_kernel() {
         scripts/config --enable SKW_VENDOR || true
         scripts/config --enable SKW_DFS_MASTER || true
         scripts/config --module SKW_BT || true
+        # Enable MacroSilicon MS91xx USB Display DRM Driver
+        scripts/config --module DRM_MSDISP || true
         # Enable Rockchip sensor framework before selecting accel drivers.
         scripts/config --enable SENSOR_DEVICE || true
         scripts/config --enable GSENSOR_DEVICE || true
