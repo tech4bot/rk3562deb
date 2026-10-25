@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Docked Controller
+Comment=Turn tablet into trackpad & keyboard for external display
+Exec=/usr/local/bin/dock-mode.sh toggle
+Icon=input-touchpad
+Terminal=false
+Type=Application
+Categories=Utility;Settings;
+Keywords=dock;trackpad;touchpad;keyboard;external;display;

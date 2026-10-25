@@ -1027,6 +1027,24 @@ CHROMIUM_HW_SYNC
                 fi
             done
         fi
+
+        # Sync tablet dock controller and uinput permissions
+        if [ -f "${ROOT_DIR}/overlay/99-uinput.rules" ] && [ -d "${OUT_DIR}/rootfs/etc/udev/rules.d" ]; then
+            ${SUDO_CMD}cp "${ROOT_DIR}/overlay/99-uinput.rules" "${OUT_DIR}/rootfs/etc/udev/rules.d/99-uinput.rules"
+            ${SUDO_CMD}chmod 0644 "${OUT_DIR}/rootfs/etc/udev/rules.d/99-uinput.rules"
+        fi
+        if [ -f "${ROOT_DIR}/overlay/tablet-dock-pad.py" ] && [ -f "${ROOT_DIR}/overlay/dock-mode.sh" ]; then
+            ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock-pad.py" "${OUT_DIR}/rootfs/usr/local/bin/tablet-dock-pad.py"
+            ${SUDO_CMD}cp "${ROOT_DIR}/overlay/dock-mode.sh" "${OUT_DIR}/rootfs/usr/local/bin/dock-mode.sh"
+            ${SUDO_CMD}chmod 0755 "${OUT_DIR}/rootfs/usr/local/bin/tablet-dock-pad.py" "${OUT_DIR}/rootfs/usr/local/bin/dock-mode.sh"
+        fi
+        if [ -f "${ROOT_DIR}/overlay/tablet-dock.desktop" ]; then
+            ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/usr/share/applications/tablet-dock.desktop"
+            ${SUDO_CMD}chmod 0644 "${OUT_DIR}/rootfs/usr/share/applications/tablet-dock.desktop"
+            if [ -d "${OUT_DIR}/rootfs/home/chaos/.local/share/applications" ]; then
+                ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/home/chaos/.local/share/applications/tablet-dock.desktop"
+            fi
+        fi
     fi
 
     ${SUDO_CMD}mkfs.ext4 -F \

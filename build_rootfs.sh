@@ -905,6 +905,12 @@ if [ -f "${ROOT_DIR}/overlay/70-rk-mpp.rules" ]; then
     chmod 0644 "${ROOTFS_MNT}/etc/udev/rules.d/70-rk-mpp.rules"
 fi
 
+# Install uinput udev rule for unprivileged virtual input access
+if [ -f "${ROOT_DIR}/overlay/99-uinput.rules" ]; then
+    cp "${ROOT_DIR}/overlay/99-uinput.rules" "${ROOTFS_MNT}/etc/udev/rules.d/99-uinput.rules"
+    chmod 0644 "${ROOTFS_MNT}/etc/udev/rules.d/99-uinput.rules"
+fi
+
 # Keep VA-API environment deterministic across rebuilds.
 touch "${ROOTFS_MNT}/etc/environment"
 sed -i '/^MOZ_/d;/^LIBVA_DRIVER_NAME=/d;/^LIBVA_DRIVERS_PATH=/d' \
@@ -2435,6 +2441,22 @@ if [ -f "${ROOT_DIR}/overlay/rkcam-rear-preview.sh" ] && \
         /home/chaos/.local/bin/rkcam-rear-preview.sh \
         /home/chaos/.local/share/applications/rkcam-rear-preview.desktop \
         /home/chaos/Desktop/Rear-Camera-Preview.desktop || true
+fi
+
+# Install Tablet Dock Controller (turns tablet into trackpad & keyboard for external monitor)
+if [ -f "${ROOT_DIR}/overlay/tablet-dock-pad.py" ] && \
+   [ -f "${ROOT_DIR}/overlay/dock-mode.sh" ]; then
+    echo "[*] Installing Tablet Dock Controller..."
+    cp "${ROOT_DIR}/overlay/tablet-dock-pad.py" "${ROOTFS_MNT}/usr/local/bin/tablet-dock-pad.py"
+    cp "${ROOT_DIR}/overlay/dock-mode.sh" "${ROOTFS_MNT}/usr/local/bin/dock-mode.sh"
+    chmod 0755 "${ROOTFS_MNT}/usr/local/bin/tablet-dock-pad.py" "${ROOTFS_MNT}/usr/local/bin/dock-mode.sh"
+    if [ -f "${ROOT_DIR}/overlay/tablet-dock.desktop" ]; then
+        cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${ROOTFS_MNT}/usr/share/applications/tablet-dock.desktop"
+        chmod 0644 "${ROOTFS_MNT}/usr/share/applications/tablet-dock.desktop"
+        mkdir -p "${ROOTFS_MNT}/home/chaos/.local/share/applications"
+        cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${ROOTFS_MNT}/home/chaos/.local/share/applications/tablet-dock.desktop"
+        chroot "${ROOTFS_MNT}" chown -R chaos:chaos /home/chaos/.local/share/applications/tablet-dock.desktop || true
+    fi
 fi
 
 # Remove deprecated lantern app leftovers from reused base rootfs images.
