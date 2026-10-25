@@ -141,9 +141,8 @@ Result: `Qwen3-0.6B` is significantly faster on this RK3562 tablet for local NPU
 
 ## Known Issues
 
-- Battery may report `0%` after the tablet has been powered off for a couple of hours.
-- `rk-battery-gauge-fix.service` fixes this on boot.
-- If the tablet did not fully power off, reboot once; on the next boot the battery level should be corrected.
+- Battery fuel gauge recalibration: On cold boot after being powered off for hours, the PMIC fuel gauge is recalibrated directly from the power-on voltage (`pwron_voltage`) in the kernel driver (`rk817-boot-ocv-calibration.patch`), preventing false 0% reports and emergency shutdowns.
+- `rk-battery-gauge-fix.service` remains present as a fallback for userspace recovery.
 - Front (`s5k5e8`) and rear (`s5k4h5yb`) camera preview/capture are functional, but colors are still slightly off and require additional ISP calibration.
 
 ---
@@ -511,8 +510,8 @@ The Wi-Fi and Bluetooth driver source in `overlay/drivers/net/wireless/ea6621q/`
 ## Contributors
 
 - **[@tech4bot](https://github.com/tech4bot)** — Project creator & maintainer
-- **[@drhaynes](https://github.com/drhaynes)** (David Haynes) — Panfrost GPU hardware acceleration research, driver clock fixes, and boot stability ([#11](https://github.com/tech4bot/rk3562deb/issues/11))
-- **[@ethersloth](https://github.com/ethersloth)** (Gregory Whitlock) — Rockchip VA-API Chromium hardware video decode patches, DDR stability analysis, and playback bench ([ethersloth/c20e-rk3562-linux](https://github.com/ethersloth/c20e-rk3562-linux))
+- **[@drhaynes](https://github.com/drhaynes)** — Panfrost GPU hardware acceleration research, driver clock fixes, and boot stability ([#11](https://github.com/tech4bot/rk3562deb/issues/11))
+- **[@ethersloth](https://github.com/ethersloth)** — Rockchip VA-API Chromium hardware video decode patches, DDR stability analysis, and playback bench ([ethersloth/c20e-rk3562-linux](https://github.com/ethersloth/c20e-rk3562-linux))
 
 ---
 

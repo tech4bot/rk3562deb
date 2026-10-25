@@ -1,5 +1,5 @@
 diff --git a/drivers/power/supply/rk817_battery.c b/drivers/power/supply/rk817_battery.c
-index 41bf7ea3c..3639233d5 100644
+index 41bf7ea3c6f3..997fa08c76d4 100644
 --- a/drivers/power/supply/rk817_battery.c
 +++ b/drivers/power/supply/rk817_battery.c
 @@ -51,7 +51,16 @@ module_param_named(dbg_level, dbg_enable, int, 0644);
@@ -100,49 +100,55 @@ index 41bf7ea3c..3639233d5 100644
  
  	rk817_bat_update_qmax(battery, battery->qmax);
  	rk817_bat_save_fcc(battery, battery->fcc);
-@@ -2104,6 +2149,7 @@ static void rk817_bat_first_pwron(struct rk817_battery_device *battery)
+@@ -2104,6 +2149,8 @@ static void rk817_bat_first_pwron(struct rk817_battery_device *battery)
  static void rk817_bat_not_first_pwron(struct rk817_battery_device *battery)
  {
  	int now_cap, pre_soc, pre_cap;
 +	int ocv_vol, ocv_soc, ocv_cap;
++	int ref_vol;
  
  	battery->fcc = rk817_bat_get_fcc(battery);
  	pre_soc = rk817_bat_get_prev_dsoc(battery);
-@@ -2128,6 +2174,37 @@ static void rk817_bat_not_first_pwron(struct rk817_battery_device *battery)
+@@ -2128,7 +2175,42 @@ static void rk817_bat_not_first_pwron(struct rk817_battery_device *battery)
  		BAT_INFO("initialized yet..\n");
  	}
  
 +	/*
-+	 * Always recalibrate dsoc/cap from the PMIC's OCV register at boot.
++	 * Always recalibrate dsoc/cap from the PMIC's OCV register or
++	 * power-on voltage at boot.
 +	 *
 +	 * The RK817 hardware samples open-circuit voltage during low-current
-+	 * (relax) periods, so the value latched in OCV_VOL is the most
-+	 * trustworthy indicator of true battery state immediately after a
-+	 * cold or warm boot.  Without this, the driver blindly trusts the
-+	 * dsoc/cap saved in scratch registers, which can drift wildly across
-+	 * power cycles (e.g. boot at 0%, then 33%, then 85% with the same
-+	 * physical pack voltage).  The original Rockchip code only ran OCV
-+	 * calibration when pwroff_min >= 30 and FG_INIT was clear, which is
-+	 * almost never true on this tablet because U-Boot sets FG_INIT.
-+	 *
-+	 * Range gate (3.0V .. 4.4V) protects against a stale or uninitialised
-+	 * OCV register reading nonsense.
++	 * (relax) periods, so the value latched in OCV_VOL is ideal when present.
++	 * If OCV_VOL is unpopulated / out-of-range (e.g. cold boot where 0x63/0x64
++	 * reads 0), fall back to pwron_voltage (sampled by PMIC ADC at power-on),
++	 * exactly as rk817_bat_first_pwron() does.
++	 * Without this fallback, a cold boot with is_halt=true leaves pre_soc at 0,
++	 * causing the tablet to report 0% capacity and trigger immediate shutdown.
 +	 */
 +	ocv_vol = rk817_bat_get_ocv_voltage(battery);
-+	if (ocv_vol >= 3000 && ocv_vol <= 4400) {
-+		ocv_soc = rk817_bat_vol2soc(battery, ocv_vol);
-+		ocv_cap = rk817_bat_vol2cap(battery, ocv_vol);
-+		BAT_INFO("boot OCV calib: ocv=%dmV pre(dsoc=%d cap=%d) -> new(dsoc=%d cap=%d)\n",
-+			 ocv_vol, pre_soc, pre_cap, ocv_soc, ocv_cap);
++	if (ocv_vol >= 3000 && ocv_vol <= 4400)
++		ref_vol = ocv_vol;
++	else if (battery->pwron_voltage >= 3000 && battery->pwron_voltage <= 4400)
++		ref_vol = battery->pwron_voltage;
++	else
++		ref_vol = 0;
++
++	if (ref_vol >= 3000 && ref_vol <= 4400) {
++		ocv_soc = rk817_bat_vol2soc(battery, ref_vol);
++		ocv_cap = rk817_bat_vol2cap(battery, ref_vol);
++		BAT_INFO("boot OCV calib: ref=%dmV (ocv=%d pwron=%d) pre(dsoc=%d cap=%d) -> new(dsoc=%d cap=%d)\n",
++			 ref_vol, ocv_vol, battery->pwron_voltage, pre_soc, pre_cap, ocv_soc, ocv_cap);
 +		pre_soc = ocv_soc;
 +		pre_cap = ocv_cap;
 +		rk817_bat_init_coulomb_cap(battery, ocv_cap);
 +		battery->remain_cap = ocv_cap * 1000;
 +	} else {
-+		BAT_INFO("boot OCV calib skipped: ocv=%dmV out of range\n",
-+			 ocv_vol);
++		BAT_INFO("boot OCV calib skipped: ocv=%dmV pwron=%dmV out of range\n",
++			 ocv_vol, battery->pwron_voltage);
 +	}
 +
  	battery->dsoc = pre_soc;
++	battery->rsoc = pre_soc;
  	battery->nac = pre_cap;
  	if (battery->nac < 0)
+ 		battery->nac = 0;
