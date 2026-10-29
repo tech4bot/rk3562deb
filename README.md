@@ -250,6 +250,10 @@ These variables can be set before running `build.sh` to control build behaviour:
 | `RKDEBIAN_MALI_GBM_PROVIDER` | `vendor` | Mali-only option: `vendor` keeps `mali/libgbm.so.1` from the blob package (default), `debian` overrides it to Debian `libgbm.so.1` for compatibility testing. |
 | `RKDEBIAN_PREINSTALL_FREETUBE` | `0` | Set to `1` to preinstall FreeTube Flatpak (adds ~300 MB to rootfs). Default is `0`. |
 | `RKDEBIAN_MINIMIZE_IMAGE` | `0` | Set to `1` for aggressive size reduction (prunes non-English locales plus `/usr/share/doc`, `/usr/share/help`, `/usr/share/man`, `/usr/share/info`, and unused Flatpak objects). |
+| `RKDEBIAN_USER` | `chaos` | Name of the default login user (its password is the same as the name). |
+| `RKDEBIAN_WIFI_DIR` | `local/wifi` | Directory of NetworkManager `*.nmconnection` keyfiles to preinstall. `local/` is git-ignored, so Wi-Fi passwords stay out of the repo. |
+| `RKDEBIAN_HOSTNAME` | `rk3562-debian` | Hostname of the image. |
+| `RKDEBIAN_SSH_KEYS` | `local/ssh/authorized_keys` | If the file exists, it is installed as `~/.ssh/authorized_keys` for the default user. |
 
 ### Kernel
 
@@ -406,6 +410,8 @@ The build system creates the following accounts in the Debian image:
 |---------|----------|----------|-------|
 | Standard user | `chaos` | `chaos` | Passwordless sudo |
 | Root | `root` | `root` | Direct root login |
+
+Set `RKDEBIAN_USER=<name>` at build time to use a different user name. Personal settings can be kept in the git-ignored `local/build.env` (for example `RKDEBIAN_USER=myname` and `RKDEBIAN_HOSTNAME=my-tablet`); both build scripts load it automatically.
 
 ### Lock Screen & Passcode
 

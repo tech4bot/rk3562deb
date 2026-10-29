@@ -52,3 +52,6 @@ darkos-updates2/
 # Stale session and handoff docs
 docs/camera-bringup-handoff-*.md
 docs/superpowers/plans/
+
+# Local per-builder settings (Wi-Fi credentials, etc.)
+local/

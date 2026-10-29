@@ -6,6 +6,15 @@ export PATH="/usr/sbin:/sbin:$PATH"
 # RK3562 Debian 13 Builder
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Per-builder settings (user name, hostname, ...) from the git-ignored
+# local/build.env, e.g. RKDEBIAN_USER=myname. Variables set there override the
+# environment.
+if [ -f "${ROOT_DIR}/local/build.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "${ROOT_DIR}/local/build.env"
+    set +a
+fi
 SRC_DIR="${ROOT_DIR}/src"
 OUT_DIR="${ROOT_DIR}/out"
 OUTPUT_DIR="${ROOT_DIR}/output"
@@ -384,7 +393,7 @@ sanitize_kbuild_cmd_files() {
 }
 
 run_build_rootfs() {
-    local preserve_env="RKDEBIAN_FORCE_CLEAN_ROOTFS,ROOTFS_IMAGE_SIZE,ROOTFS_HEADROOM_MB,ROOTFS_MIN_MB,RKDEBIAN_DISPLAY_SERVER,RKDEBIAN_GPU_STACK,RKDEBIAN_UI_SESSION,RKDEBIAN_CPU_GOVERNOR,RKDEBIAN_PREINSTALL_FREETUBE,RKDEBIAN_MINIMIZE_IMAGE"
+    local preserve_env="RKDEBIAN_FORCE_CLEAN_ROOTFS,ROOTFS_IMAGE_SIZE,ROOTFS_HEADROOM_MB,ROOTFS_MIN_MB,RKDEBIAN_DISPLAY_SERVER,RKDEBIAN_GPU_STACK,RKDEBIAN_UI_SESSION,RKDEBIAN_CPU_GOVERNOR,RKDEBIAN_PREINSTALL_FREETUBE,RKDEBIAN_MINIMIZE_IMAGE,RKDEBIAN_USER,RKDEBIAN_WIFI_DIR,RKDEBIAN_HOSTNAME,RKDEBIAN_SSH_KEYS"
     if [ "${EUID}" -eq 0 ]; then
         bash "${ROOT_DIR}/build_rootfs.sh"
     else
@@ -1082,8 +1091,8 @@ CHROMIUM_HW_SYNC
         if [ -f "${ROOT_DIR}/overlay/tablet-dock.desktop" ]; then
             ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/usr/share/applications/tablet-dock.desktop"
             ${SUDO_CMD}chmod 0644 "${OUT_DIR}/rootfs/usr/share/applications/tablet-dock.desktop"
-            if [ -d "${OUT_DIR}/rootfs/home/chaos/.local/share/applications" ]; then
-                ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/home/chaos/.local/share/applications/tablet-dock.desktop"
+            if [ -d "${OUT_DIR}/rootfs/home/${RKDEBIAN_USER:-chaos}/.local/share/applications" ]; then
+                ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/home/${RKDEBIAN_USER:-chaos}/.local/share/applications/tablet-dock.desktop"
             fi
         fi
     fi

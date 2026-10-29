@@ -17,6 +17,15 @@ if [ "$#" -gt 0 ]; then
 fi
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Per-builder settings (user name, hostname, ...) from the git-ignored
+# local/build.env, e.g. RKDEBIAN_USER=myname. Variables set there override the
+# environment.
+if [ -f "${ROOT_DIR}/local/build.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "${ROOT_DIR}/local/build.env"
+    set +a
+fi
 OUT_DIR="${ROOT_DIR}/out"
 ROOTFS_MNT="${OUT_DIR}/rootfs"
 MODULES_DIR="${OUT_DIR}/modules_staging/lib/modules"
@@ -27,6 +36,22 @@ RKDEBIAN_UI_SESSION="${RKDEBIAN_UI_SESSION:-phosh}"
 RKDEBIAN_MALI_GBM_PROVIDER="${RKDEBIAN_MALI_GBM_PROVIDER:-vendor}"
 RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE:-0}"
 RKDEBIAN_MINIMIZE_IMAGE="${RKDEBIAN_MINIMIZE_IMAGE:-0}"
+# Default login user; its password is the same as the name.
+RKDEBIAN_USER="${RKDEBIAN_USER:-chaos}"
+if ! [[ "${RKDEBIAN_USER}" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
+    echo "[-] Invalid RKDEBIAN_USER=${RKDEBIAN_USER} (expected a lowercase Linux user name)."
+    exit 1
+fi
+RKDEBIAN_HOSTNAME="${RKDEBIAN_HOSTNAME:-rk3562-debian}"
+if ! [[ "${RKDEBIAN_HOSTNAME}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]; then
+    echo "[-] Invalid RKDEBIAN_HOSTNAME=${RKDEBIAN_HOSTNAME}."
+    exit 1
+fi
+
+# Replace the @RKDEBIAN_USER@ placeholder in files written from quoted heredocs.
+rk_fill_user() {
+    sed -i "s/@RKDEBIAN_USER@/${RKDEBIAN_USER}/g" "$@"
+}
 
 case "${RKDEBIAN_DISPLAY_SERVER}" in
     auto|wayland|x11) ;;
@@ -379,17 +404,15 @@ update-locale LANG=en_US.UTF-8
 
 # Add default user
 groupadd -f render
-if ! id "chaos" &>/dev/null; then
-    useradd -m -s /bin/bash chaos
-    echo "chaos:chaos" | chpasswd
+if ! id "${RKDEBIAN_USER}" &>/dev/null; then
+    useradd -m -s /bin/bash "${RKDEBIAN_USER}"
+    echo "${RKDEBIAN_USER}:${RKDEBIAN_USER}" | chpasswd
 fi
-usermod -aG sudo,video,audio,netdev,render,input chaos
+usermod -aG sudo,video,audio,netdev,render,input "${RKDEBIAN_USER}"
 install -d -m 0755 /etc/sudoers.d
-cat > /etc/sudoers.d/10-chaos-nopasswd << 'SUDOERS_CHAOS'
-chaos ALL=(ALL) NOPASSWD: ALL
-SUDOERS_CHAOS
-chmod 0440 /etc/sudoers.d/10-chaos-nopasswd
-chown root:root /etc/sudoers.d/10-chaos-nopasswd
+printf '%s ALL=(ALL) NOPASSWD: ALL\n' "${RKDEBIAN_USER}" > /etc/sudoers.d/10-rkdebian-user-nopasswd
+chmod 0440 /etc/sudoers.d/10-rkdebian-user-nopasswd
+chown root:root /etc/sudoers.d/10-rkdebian-user-nopasswd
 visudo -cf /etc/sudoers >/dev/null
 
 # Set root password
@@ -444,6 +467,15 @@ auto lo
 iface lo inet loopback
 IFACES
 
+# Wire the system dconf database into user sessions. Without this profile
+# dconf only reads user-db:user, so every /etc/dconf/db/local.d/ default
+# below is silently ignored.
+mkdir -p /etc/dconf/profile
+cat > /etc/dconf/profile/user << 'DCONF_PROFILE'
+user-db:user
+system-db:local
+DCONF_PROFILE
+
 # Default Phosh WWAN backend and fast OSK bottom-bar toggle.
 mkdir -p /etc/dconf/db/local.d
 cat > /etc/dconf/db/local.d/20-rkdebian-phosh-wwan << 'PHOSH_WWAN_DCONF'
@@ -475,6 +507,11 @@ cat > /etc/dconf/db/local.d/22-rkdebian-power-button << 'PHOSH_POWERKEY_DCONF'
 [org/gnome/settings-daemon/plugins/power]
 power-button-action='nothing'
 PHOSH_POWERKEY_DCONF
+
+cat > /etc/dconf/db/local.d/23-rkdebian-interface << 'INTERFACE_DCONF'
+[org/gnome/desktop/interface]
+show-battery-percentage=true
+INTERFACE_DCONF
 dconf update >/dev/null 2>&1 || true
 
 # Automatically power adapters when bluetoothd starts.
@@ -519,6 +556,7 @@ if ! chroot "${ROOTFS_MNT}" env \
     RKDEBIAN_UI_SESSION="${RKDEBIAN_UI_SESSION}" \
     RKDEBIAN_PREINSTALL_FREETUBE="${RKDEBIAN_PREINSTALL_FREETUBE}" \
     RKDEBIAN_MINIMIZE_IMAGE="${RKDEBIAN_MINIMIZE_IMAGE}" \
+    RKDEBIAN_USER="${RKDEBIAN_USER}" \
     QEMU_RESERVED_VA=0x4000000000 \
     /bin/bash /tmp/setup_debian.sh; then
     echo "[-] Error: chroot setup script failed (/tmp/setup_debian.sh)."
@@ -1136,7 +1174,7 @@ else
 fi
 
 # Remove standard PIN keypad and force virtual on-screen keyboard on lockscreen (closes #10).
-# The default user password is "chaos" (alphanumeric); presenting a numeric PIN keypad confuses
+# The default user password equals the user name (alphanumeric); presenting a numeric PIN keypad confuses
 # users who do not know to tap the tiny keyboard toggle icon.
 echo "[*] Patching Phosh lockscreen: remove standard PIN keypad and force virtual keyboard..."
 if [ -f "${PHOSH_BIN}" ]; then
@@ -1245,7 +1283,10 @@ fi
 
 # 8. Setting hostname and fstab
 echo "[*] Setting hostname and fstab..."
-echo "rk3562-debian" > "${ROOTFS_MNT}/etc/hostname"
+echo "${RKDEBIAN_HOSTNAME}" > "${ROOTFS_MNT}/etc/hostname"
+if ! grep -qE "^127\.0\.1\.1[[:space:]]" "${ROOTFS_MNT}/etc/hosts" 2>/dev/null; then
+    echo -e "127.0.1.1\t${RKDEBIAN_HOSTNAME}" >> "${ROOTFS_MNT}/etc/hosts"
+fi
 echo "CHASSIS=tablet" > "${ROOTFS_MNT}/etc/machine-info"
 
 # Record the requested build profile inside the rootfs for post-flash checks.
@@ -1264,6 +1305,30 @@ PARTUUID=c0ffee11-2233-4455-6677-8899aabbccdd  /  ext4  defaults,noatime  0  1
 binfmt_misc /proc/sys/fs/binfmt_misc binfmt_misc defaults 0 0
 FSTAB
 
+# 8b. Optional local Wi-Fi profiles
+# Credentials never live in this repo: drop NetworkManager keyfiles into
+# local/wifi/ (git-ignored) or point RKDEBIAN_WIFI_DIR elsewhere.
+RKDEBIAN_WIFI_DIR="${RKDEBIAN_WIFI_DIR:-${ROOT_DIR}/local/wifi}"
+if compgen -G "${RKDEBIAN_WIFI_DIR}/*.nmconnection" >/dev/null; then
+    echo "[*] Installing local Wi-Fi profiles from ${RKDEBIAN_WIFI_DIR}..."
+    install -d -m 0700 "${ROOTFS_MNT}/etc/NetworkManager/system-connections"
+    for nmconn in "${RKDEBIAN_WIFI_DIR}"/*.nmconnection; do
+        install -m 0600 -o root -g root "${nmconn}" \
+            "${ROOTFS_MNT}/etc/NetworkManager/system-connections/"
+    done
+fi
+
+# 8c. Optional SSH public keys for the login user (git-ignored by default).
+RKDEBIAN_SSH_KEYS="${RKDEBIAN_SSH_KEYS:-${ROOT_DIR}/local/ssh/authorized_keys}"
+if [ -s "${RKDEBIAN_SSH_KEYS}" ]; then
+    echo "[*] Installing SSH authorized_keys for ${RKDEBIAN_USER}..."
+    install -d -m 0700 "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.ssh"
+    install -m 0600 "${RKDEBIAN_SSH_KEYS}" \
+        "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.ssh/authorized_keys"
+    chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+        "/home/${RKDEBIAN_USER}/.ssh"
+fi
+
 # 9. Configure display manager autologin
 echo "[*] Configuring display manager autologin (${RKDEBIAN_UI_SESSION})..."
 rm -rf "${ROOTFS_MNT}/etc/sddm.conf.d"
@@ -1279,14 +1344,14 @@ rm -f "${ROOTFS_MNT}/etc/systemd/system/emulationstation.service" \
 
 # Drop stale per-user overrides from previous experiments that can force a
 # mismatched session backend and cause black-screen/login-loop behavior.
-rm -f "${ROOTFS_MNT}/home/chaos/.config/environment.d/90-plasma-x11.conf" \
-      "${ROOTFS_MNT}/home/chaos/.config/environment.d/91-plasma-shell.conf" \
-      "${ROOTFS_MNT}/home/chaos/.config/plasma-org.kde.plasma.phoneshell-appletsrc" \
-      "${ROOTFS_MNT}/home/chaos/.config/plasma-org.kde.plasma.desktop-appletsrc" \
-      "${ROOTFS_MNT}/home/chaos/.config/plasmashellrc"
-rm -rf "${ROOTFS_MNT}/home/chaos/.cache/lomiri" \
-       "${ROOTFS_MNT}/home/chaos/.config/lomiri" \
-       "${ROOTFS_MNT}/home/chaos/.local/share/lomiri"
+rm -f "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/environment.d/90-plasma-x11.conf" \
+      "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/environment.d/91-plasma-shell.conf" \
+      "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/plasma-org.kde.plasma.phoneshell-appletsrc" \
+      "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/plasma-org.kde.plasma.desktop-appletsrc" \
+      "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/plasmashellrc"
+rm -rf "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.cache/lomiri" \
+       "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/lomiri" \
+       "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/lomiri"
 
 # Remove stale KDE LightDM defaults that can override autologin-session.
 rm -f "${ROOTFS_MNT}/usr/share/lightdm/lightdm.conf.d/40-kde-plasma-kf5.conf"
@@ -1299,7 +1364,7 @@ minimum-vt=1
 [Seat:*]
 type=local
 user-session=phosh
-autologin-user=chaos
+autologin-user=@RKDEBIAN_USER@
 autologin-session=phosh
 session-wrapper=/etc/X11/Xsession
 
@@ -1307,6 +1372,7 @@ session-wrapper=/etc/X11/Xsession
 
 [VNCServer]
 LIGHTDM_CONF
+rk_fill_user "${ROOTFS_MNT}/etc/lightdm/lightdm.conf"
 mkdir -p "${ROOTFS_MNT}/etc/X11" "${ROOTFS_MNT}/etc/systemd/system" \
          "${ROOTFS_MNT}/etc/systemd/system/lightdm.service.d"
 printf '%s\n' '/usr/sbin/lightdm' > "${ROOTFS_MNT}/etc/X11/default-display-manager"
@@ -1350,15 +1416,15 @@ rm -f "${ROOTFS_MNT}/etc/systemd/user/graphical-session.target.wants/waybar.serv
 # Remove stale Maliit overrides from reused rootfs trees.
 rm -f "${ROOTFS_MNT}/etc/environment.d/90-rkdebian-inputmethod.conf" \
       "${ROOTFS_MNT}/etc/profile.d/90-rkdebian-maliit.sh" \
-      "${ROOTFS_MNT}/home/chaos/.config/autostart/maliit-server.desktop"
+      "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/maliit-server.desktop"
 
 # Install Phosh auto-rotation helper (raw accelerometer axis polling).
 # This mirrors the on-device fix:
 # - rotates from /sys axis_data when SensorProxy reports "undefined"
 # - honors Phosh top-bar rotation lock toggle
 # - uses landscape mapping tuned for this tablet panel orientation
-mkdir -p "${ROOTFS_MNT}/home/chaos/.local/bin" "${ROOTFS_MNT}/home/chaos/.config/autostart"
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/phosh-autorotate.sh" << 'PHOSH_AUTOROTATE'
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin" "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart"
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/phosh-autorotate.sh" << 'PHOSH_AUTOROTATE'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -1785,26 +1851,27 @@ while true; do
   sleep "$POLL_INTERVAL"
 done
 PHOSH_AUTOROTATE
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/phosh-autorotate.sh"
+chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/phosh-autorotate.sh"
 
-cat > "${ROOTFS_MNT}/home/chaos/.config/autostart/phosh-autorotate.desktop" << 'PHOSH_AUTOROTATE_DESKTOP'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/phosh-autorotate.desktop" << 'PHOSH_AUTOROTATE_DESKTOP'
 [Desktop Entry]
 Type=Application
 Version=1.0
 Name=Phosh Auto Rotate
 Comment=Auto-rotate display based on accelerometer axis data
-Exec=/home/chaos/.local/bin/phosh-autorotate.sh
+Exec=/home/@RKDEBIAN_USER@/.local/bin/phosh-autorotate.sh
 OnlyShowIn=Phosh;
 X-GNOME-Autostart-enabled=true
 NoDisplay=true
 PHOSH_AUTOROTATE_DESKTOP
+rk_fill_user "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/phosh-autorotate.desktop"
 
-chroot "${ROOTFS_MNT}" chown chaos:chaos \
-    /home/chaos/.local/bin/phosh-autorotate.sh \
-    /home/chaos/.config/autostart/phosh-autorotate.desktop || true
+chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.local/bin/phosh-autorotate.sh \
+    /home/${RKDEBIAN_USER}/.config/autostart/phosh-autorotate.desktop || true
 
 # Map physical volume keys (adc-keys) to PipeWire volume changes in Phosh.
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/phosh-volume-keys.sh" << 'PHOSH_VOLUME_KEYS'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/phosh-volume-keys.sh" << 'PHOSH_VOLUME_KEYS'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -1957,22 +2024,23 @@ while true; do
   sleep 1
 done
 PHOSH_VOLUME_KEYS
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/phosh-volume-keys.sh"
+chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/phosh-volume-keys.sh"
 
-cat > "${ROOTFS_MNT}/home/chaos/.config/autostart/phosh-volume-keys.desktop" << 'PHOSH_VOLUME_KEYS_DESKTOP'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/phosh-volume-keys.desktop" << 'PHOSH_VOLUME_KEYS_DESKTOP'
 [Desktop Entry]
 Type=Application
 Version=1.0
 Name=Phosh Volume Keys
 Comment=Map physical volume keys to audio sink volume
-Exec=/home/chaos/.local/bin/phosh-volume-keys.sh
+Exec=/home/@RKDEBIAN_USER@/.local/bin/phosh-volume-keys.sh
 OnlyShowIn=Phosh;
 X-GNOME-Autostart-enabled=true
 NoDisplay=true
 PHOSH_VOLUME_KEYS_DESKTOP
+rk_fill_user "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/phosh-volume-keys.desktop"
 
-mkdir -p "${ROOTFS_MNT}/home/chaos/.config/systemd/user/default.target.wants"
-cat > "${ROOTFS_MNT}/home/chaos/.config/systemd/user/phosh-volume-keys.service" << 'PHOSH_VOLUME_KEYS_SERVICE'
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants"
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/phosh-volume-keys.service" << 'PHOSH_VOLUME_KEYS_SERVICE'
 [Unit]
 Description=Map physical volume keys to audio sink volume
 After=graphical-session.target pipewire.service
@@ -1980,38 +2048,39 @@ Wants=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/home/chaos/.local/bin/phosh-volume-keys.sh
+ExecStart=/home/@RKDEBIAN_USER@/.local/bin/phosh-volume-keys.sh
 Restart=always
 RestartSec=1
 
 [Install]
 WantedBy=default.target
 PHOSH_VOLUME_KEYS_SERVICE
+rk_fill_user "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/phosh-volume-keys.service"
 ln -sf ../phosh-volume-keys.service \
-    "${ROOTFS_MNT}/home/chaos/.config/systemd/user/default.target.wants/phosh-volume-keys.service"
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/phosh-volume-keys.service"
 
-chroot "${ROOTFS_MNT}" chown chaos:chaos \
-    /home/chaos/.local/bin/phosh-volume-keys.sh \
-    /home/chaos/.config/autostart/phosh-volume-keys.desktop \
-    /home/chaos/.config/systemd/user/phosh-volume-keys.service || true
+chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.local/bin/phosh-volume-keys.sh \
+    /home/${RKDEBIAN_USER}/.config/autostart/phosh-volume-keys.desktop \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/phosh-volume-keys.service || true
 
 # Prevent duplicate/competing keyboards when reusing an old rootfs tree.
-cat > "${ROOTFS_MNT}/home/chaos/.config/autostart/onboard.desktop" << 'ONBOARD_HIDE'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/onboard.desktop" << 'ONBOARD_HIDE'
 [Desktop Entry]
 Hidden=true
 ONBOARD_HIDE
-cat > "${ROOTFS_MNT}/home/chaos/.config/autostart/onboard-autostart.desktop" << 'ONBOARD_AUTOSTART_HIDE'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/onboard-autostart.desktop" << 'ONBOARD_AUTOSTART_HIDE'
 [Desktop Entry]
 Hidden=true
 ONBOARD_AUTOSTART_HIDE
-cat > "${ROOTFS_MNT}/home/chaos/.config/autostart/maliit-keyboard.desktop" << 'MALIIT_KEYBOARD_HIDE'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/maliit-keyboard.desktop" << 'MALIIT_KEYBOARD_HIDE'
 [Desktop Entry]
 Hidden=true
 MALIIT_KEYBOARD_HIDE
-chroot "${ROOTFS_MNT}" chown chaos:chaos \
-    /home/chaos/.config/autostart/onboard.desktop \
-    /home/chaos/.config/autostart/onboard-autostart.desktop \
-    /home/chaos/.config/autostart/maliit-keyboard.desktop || true
+chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.config/autostart/onboard.desktop \
+    /home/${RKDEBIAN_USER}/.config/autostart/onboard-autostart.desktop \
+    /home/${RKDEBIAN_USER}/.config/autostart/maliit-keyboard.desktop || true
 
 # Trim background autostarts that are unnecessary in the Phosh tablet image.
 # These either belong to other desktops (XFCE/GNOME) or are optional daemons
@@ -2033,20 +2102,20 @@ xfsettingsd.desktop
 # Remove stale per-user overrides/legacy flashlight tray autostarts from
 # earlier builds that used AppIndicator.
 rm -f \
-    "${ROOTFS_MNT}/home/chaos/.config/autostart/ayatana-indicator-application.desktop" \
-    "${ROOTFS_MNT}/home/chaos/.config/autostart/rk-indicator-host.desktop" \
-    "${ROOTFS_MNT}/home/chaos/.config/autostart/rk-flashlight-indicator.desktop"
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/ayatana-indicator-application.desktop" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/rk-indicator-host.desktop" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/rk-flashlight-indicator.desktop"
 
 for desktop in ${PHOSH_DISABLE_AUTOSTARTS}; do
-cat > "${ROOTFS_MNT}/home/chaos/.config/autostart/${desktop}" << 'AUTOSTART_HIDE'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/autostart/${desktop}" << 'AUTOSTART_HIDE'
 [Desktop Entry]
 Hidden=true
 AUTOSTART_HIDE
-chroot "${ROOTFS_MNT}" chown chaos:chaos "/home/chaos/.config/autostart/${desktop}" || true
+chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" "/home/${RKDEBIAN_USER}/.config/autostart/${desktop}" || true
 done
 
 # Hide launcher entries that are not useful in the tablet image.
-mkdir -p "${ROOTFS_MNT}/home/chaos/.local/share/applications"
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications"
 PHOSH_HIDE_LAUNCHERS="
 vim.desktop
 yelp.desktop
@@ -2063,11 +2132,11 @@ uxterm.desktop
 "
 
 for desktop in ${PHOSH_HIDE_LAUNCHERS}; do
-cat > "${ROOTFS_MNT}/home/chaos/.local/share/applications/${desktop}" << 'LAUNCHER_HIDE'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/${desktop}" << 'LAUNCHER_HIDE'
 [Desktop Entry]
 Hidden=true
 LAUNCHER_HIDE
-chroot "${ROOTFS_MNT}" chown chaos:chaos "/home/chaos/.local/share/applications/${desktop}" || true
+chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" "/home/${RKDEBIAN_USER}/.local/share/applications/${desktop}" || true
 done
 
 # Keep a fallback polkit agent autostart for Phosh sessions.
@@ -2108,11 +2177,11 @@ POLKIT
 fi
 
 # Remove stale keyboard launcher that points to Maliit binaries.
-rm -f "${ROOTFS_MNT}/home/chaos/Desktop/on-screen-keyboard.desktop"
+rm -f "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/Desktop/on-screen-keyboard.desktop"
 
 # Install custom Squeekboard layouts with down-arrow hide button.
 for kbd_dir in "${ROOTFS_MNT}/etc/skel/.local/share/squeekboard/keyboards" \
-               "${ROOTFS_MNT}/home/chaos/.local/share/squeekboard/keyboards"; do
+               "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/squeekboard/keyboards"; do
     mkdir -p "${kbd_dir}"
     cat > "${kbd_dir}/us_wide.yaml" << 'SQUEEK_US_WIDE'
 # Language: English (US)
@@ -2284,19 +2353,19 @@ done
 # Ensure user-level config/cache dirs are writable by the session user.
 # Some build-time mkdir operations run as root and can otherwise leave these
 # directories owned by root, which breaks desktop startup.
-mkdir -p "${ROOTFS_MNT}/home/chaos/.local" "${ROOTFS_MNT}/home/chaos/.cache"
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-    /home/chaos/.config \
-    /home/chaos/.local \
-    /home/chaos/.cache \
-    /home/chaos/Desktop || true
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local" "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.cache"
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.config \
+    /home/${RKDEBIAN_USER}/.local \
+    /home/${RKDEBIAN_USER}/.cache \
+    /home/${RKDEBIAN_USER}/Desktop || true
 
 # Expose the RKISP front camera as a PipeWire Video/Source for browser apps.
 # The kernel camera nodes are multiplanar V4L2 devices; this bridge publishes a
 # webcam-style source named "Front_Camera" in the user PipeWire graph.
 echo "[*] Installing PipeWire webcam bridge for front camera..."
-mkdir -p "${ROOTFS_MNT}/home/chaos/.local/bin"
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/rkcam-webcam.sh" << 'RKCAM_WEBCAM'
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin"
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh" << 'RKCAM_WEBCAM'
 #!/bin/sh
 set -eu
 
@@ -2309,10 +2378,10 @@ exec gst-launch-1.0 --no-fault -q \
   pipewiresink mode=provide sync=false \
     stream-properties="props,media.class=Video/Source,media.role=Camera,node.name=rkcam-webcam,node.description=Front_Camera,node.nick=Front_Camera"
 RKCAM_WEBCAM
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/rkcam-webcam.sh"
+chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh"
 
-mkdir -p "${ROOTFS_MNT}/home/chaos/.config/systemd/user/default.target.wants"
-cat > "${ROOTFS_MNT}/home/chaos/.config/systemd/user/rkcam-webcam.service" << 'RKCAM_WEBCAM_UNIT'
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants"
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service" << 'RKCAM_WEBCAM_UNIT'
 [Unit]
 Description=RK front camera PipeWire webcam bridge
 After=pipewire.service wireplumber.service
@@ -2329,17 +2398,17 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 RKCAM_WEBCAM_UNIT
-ln -sfn /home/chaos/.config/systemd/user/rkcam-webcam.service \
-    "${ROOTFS_MNT}/home/chaos/.config/systemd/user/default.target.wants/rkcam-webcam.service"
+ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rkcam-webcam.service"
 
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-    /home/chaos/.local/bin/rkcam-webcam.sh \
-    /home/chaos/.config/systemd/user/rkcam-webcam.service \
-    /home/chaos/.config/systemd/user/default.target.wants/rkcam-webcam.service || true
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rkcam-webcam.service || true
 
 # Install a launcher-friendly on-device front camera preview tool.
-mkdir -p "${ROOTFS_MNT}/home/chaos/.local/share/applications"
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/front-camera-preview.sh" << 'FRONT_CAM_PREVIEW'
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications"
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/front-camera-preview.sh" << 'FRONT_CAM_PREVIEW'
 #!/bin/sh
 set -eu
 
@@ -2398,49 +2467,52 @@ gst-launch-1.0 --no-fault \
   video/x-raw,format=UYVY,width=1280,height=720,framerate=15/1 ! \
   videoconvert ! ximagesink sync=false
 FRONT_CAM_PREVIEW
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/front-camera-preview.sh"
+chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/front-camera-preview.sh"
 
-cat > "${ROOTFS_MNT}/home/chaos/.local/share/applications/front-camera-preview.desktop" << 'FRONT_CAM_DESKTOP'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/front-camera-preview.desktop" << 'FRONT_CAM_DESKTOP'
 [Desktop Entry]
 Type=Application
 Name=Front Camera Preview
 Comment=Open a live front camera test window
-Exec=/home/chaos/.local/bin/front-camera-preview.sh
+Exec=/home/@RKDEBIAN_USER@/.local/bin/front-camera-preview.sh
 Icon=camera-photo
 Categories=AudioVideo;Video;
 Terminal=false
 StartupNotify=true
 FRONT_CAM_DESKTOP
+rk_fill_user "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/front-camera-preview.desktop"
 rm -f \
-    "${ROOTFS_MNT}/home/chaos/.local/share/applications/front-camera-preview-natural.desktop" \
-    "${ROOTFS_MNT}/home/chaos/.local/share/applications/front-camera-preview-boosted.desktop"
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/front-camera-preview-natural.desktop" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/front-camera-preview-boosted.desktop"
 
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-    /home/chaos/.local/bin/front-camera-preview.sh \
-    /home/chaos/.local/share/applications/front-camera-preview.desktop || true
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.local/bin/front-camera-preview.sh \
+    /home/${RKDEBIAN_USER}/.local/share/applications/front-camera-preview.desktop || true
 
 # Install launcher-friendly rear camera preview app.
 if [ -f "${ROOT_DIR}/overlay/rkcam-rear-preview.sh" ] && \
    [ -f "${ROOT_DIR}/overlay/rkcam-rear-preview.desktop" ]; then
     echo "[*] Installing rear camera preview app..."
-    mkdir -p "${ROOTFS_MNT}/home/chaos/.local/bin" \
-             "${ROOTFS_MNT}/home/chaos/.local/share/applications" \
-             "${ROOTFS_MNT}/home/chaos/Desktop"
+    mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin" \
+             "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications" \
+             "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/Desktop"
 
     cp "${ROOT_DIR}/overlay/rkcam-rear-preview.sh" \
-       "${ROOTFS_MNT}/home/chaos/.local/bin/rkcam-rear-preview.sh"
-    chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/rkcam-rear-preview.sh"
+       "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-preview.sh"
+    chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-preview.sh"
 
     cp "${ROOT_DIR}/overlay/rkcam-rear-preview.desktop" \
-       "${ROOTFS_MNT}/home/chaos/.local/share/applications/rkcam-rear-preview.desktop"
+       "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/rkcam-rear-preview.desktop"
     cp "${ROOT_DIR}/overlay/rkcam-rear-preview.desktop" \
-       "${ROOTFS_MNT}/home/chaos/Desktop/Rear-Camera-Preview.desktop"
-    chmod +x "${ROOTFS_MNT}/home/chaos/Desktop/Rear-Camera-Preview.desktop"
+       "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/Desktop/Rear-Camera-Preview.desktop"
+    chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/Desktop/Rear-Camera-Preview.desktop"
+    rk_fill_user "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/rkcam-rear-preview.desktop" \
+        "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/Desktop/Rear-Camera-Preview.desktop"
 
-    chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-        /home/chaos/.local/bin/rkcam-rear-preview.sh \
-        /home/chaos/.local/share/applications/rkcam-rear-preview.desktop \
-        /home/chaos/Desktop/Rear-Camera-Preview.desktop || true
+    chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+        /home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-preview.sh \
+        /home/${RKDEBIAN_USER}/.local/share/applications/rkcam-rear-preview.desktop \
+        /home/${RKDEBIAN_USER}/Desktop/Rear-Camera-Preview.desktop || true
 fi
 
 # Install Tablet Dock Controller (turns tablet into trackpad & keyboard for external monitor)
@@ -2453,22 +2525,22 @@ if [ -f "${ROOT_DIR}/overlay/tablet-dock-pad.py" ] && \
     if [ -f "${ROOT_DIR}/overlay/tablet-dock.desktop" ]; then
         cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${ROOTFS_MNT}/usr/share/applications/tablet-dock.desktop"
         chmod 0644 "${ROOTFS_MNT}/usr/share/applications/tablet-dock.desktop"
-        mkdir -p "${ROOTFS_MNT}/home/chaos/.local/share/applications"
-        cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${ROOTFS_MNT}/home/chaos/.local/share/applications/tablet-dock.desktop"
-        chroot "${ROOTFS_MNT}" chown -R chaos:chaos /home/chaos/.local/share/applications/tablet-dock.desktop || true
+        mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications"
+        cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/tablet-dock.desktop"
+        chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" /home/${RKDEBIAN_USER}/.local/share/applications/tablet-dock.desktop || true
     fi
 fi
 
 # Remove deprecated lantern app leftovers from reused base rootfs images.
 rm -f \
-    "${ROOTFS_MNT}/home/chaos/.local/bin/rk-lantern.sh" \
-    "${ROOTFS_MNT}/home/chaos/.local/bin/rk-lantern-screen.py" \
-    "${ROOTFS_MNT}/home/chaos/.local/share/applications/rk-lantern.desktop" \
-    "${ROOTFS_MNT}/home/chaos/Desktop/Lantern.desktop"
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rk-lantern.sh" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rk-lantern-screen.py" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/rk-lantern.desktop" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/Desktop/Lantern.desktop"
 
 # Force RK817 into a stable capture profile after PipeWire is ready.
 echo "[*] Installing RK817 pro-audio profile helper..."
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/rk-audio-pro.sh" << 'RK_AUDIO_PRO'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rk-audio-pro.sh" << 'RK_AUDIO_PRO'
 #!/bin/sh
 set -eu
 
@@ -2505,9 +2577,9 @@ fi
 
 exit 0
 RK_AUDIO_PRO
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/rk-audio-pro.sh"
+chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rk-audio-pro.sh"
 
-cat > "${ROOTFS_MNT}/home/chaos/.config/systemd/user/rk-audio-pro.service" << 'RK_AUDIO_PRO_UNIT'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rk-audio-pro.service" << 'RK_AUDIO_PRO_UNIT'
 [Unit]
 Description=Force pro-audio profile for RK817 card
 After=pipewire-pulse.service
@@ -2521,27 +2593,27 @@ RemainAfterExit=yes
 [Install]
 WantedBy=default.target
 RK_AUDIO_PRO_UNIT
-ln -sfn /home/chaos/.config/systemd/user/rk-audio-pro.service \
-    "${ROOTFS_MNT}/home/chaos/.config/systemd/user/default.target.wants/rk-audio-pro.service"
+ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rk-audio-pro.service \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rk-audio-pro.service"
 
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-    /home/chaos/.local/bin/rk-audio-pro.sh \
-    /home/chaos/.config/systemd/user/rk-audio-pro.service \
-    /home/chaos/.config/systemd/user/default.target.wants/rk-audio-pro.service || true
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.local/bin/rk-audio-pro.sh \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/rk-audio-pro.service \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rk-audio-pro.service || true
 
 echo "[*] Skipping virtual microphone source (prefer hardware mic by default)."
 rm -f \
-    "${ROOTFS_MNT}/home/chaos/.local/bin/rk-virtual-mic.sh" \
-    "${ROOTFS_MNT}/home/chaos/.config/systemd/user/rk-virtual-mic.service" \
-    "${ROOTFS_MNT}/home/chaos/.config/systemd/user/default.target.wants/rk-virtual-mic.service"
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rk-virtual-mic.sh" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rk-virtual-mic.service" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rk-virtual-mic.service"
 
 # Launch browsers with native PipeWire camera support enabled.
 # This avoids relying on pw-v4l2, which can hang on some builds.
 echo "[*] Installing browser wrappers for PipeWire camera..."
-mkdir -p "${ROOTFS_MNT}/home/chaos/.local/bin" \
-         "${ROOTFS_MNT}/home/chaos/.local/share/applications"
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin" \
+         "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications"
 
-cat > "${ROOTFS_MNT}/home/chaos/.local/bin/chromium-pwcam" << 'CHROMIUM_PWCAM'
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/chromium-pwcam" << 'CHROMIUM_PWCAM'
 #!/bin/bash
 set -euo pipefail
 
@@ -2555,13 +2627,13 @@ done
 
 exec chromium "${args[@]}"
 CHROMIUM_PWCAM
-chmod +x "${ROOTFS_MNT}/home/chaos/.local/bin/chromium-pwcam"
+chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/chromium-pwcam"
 
 if [ -f "${ROOTFS_MNT}/usr/share/applications/chromium.desktop" ]; then
     cp -f "${ROOTFS_MNT}/usr/share/applications/chromium.desktop" \
-          "${ROOTFS_MNT}/home/chaos/.local/share/applications/chromium.desktop"
-    sed -i 's|^Exec=.*|Exec=/home/chaos/.local/bin/chromium-pwcam %U|' \
-          "${ROOTFS_MNT}/home/chaos/.local/share/applications/chromium.desktop"
+          "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/chromium.desktop"
+    sed -i "s|^Exec=.*|Exec=/home/${RKDEBIAN_USER}/.local/bin/chromium-pwcam %U|" \
+          "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/chromium.desktop"
 fi
 
 # Ensure Chromium is registered as default web browser
@@ -2575,12 +2647,12 @@ x-scheme-handler/about=chromium.desktop
 x-scheme-handler/unknown=chromium.desktop
 EOF_MIME
 
-rm -f "${ROOTFS_MNT}/home/chaos/.local/bin/firefox-pwcam" \
-      "${ROOTFS_MNT}/home/chaos/.local/share/applications/firefox-esr.desktop" 2>/dev/null || true
+rm -f "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/firefox-pwcam" \
+      "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/firefox-esr.desktop" 2>/dev/null || true
 
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-    /home/chaos/.local/bin/chromium-pwcam \
-    /home/chaos/.local/share/applications || true
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.local/bin/chromium-pwcam \
+    /home/${RKDEBIAN_USER}/.local/share/applications || true
 
 # Power key behavior is handled by rk-powerkey-longpress service:
 # - short press (<3s): suspend on key release
@@ -2611,7 +2683,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 
 LONG_PRESS_SECONDS = float(os.environ.get("RK_POWERKEY_LONGPRESS_SECONDS", "3.0"))
-TARGET_USER = os.environ.get("RK_POWERKEY_USER", "chaos")
+TARGET_USER = os.environ.get("RK_POWERKEY_USER", "@RKDEBIAN_USER@")
 SCAN_INTERVAL_SECONDS = 2.0
 TRIGGER_COOLDOWN_SECONDS = 2.0
 MIN_PRESS_SECONDS = float(os.environ.get("RK_POWERKEY_MIN_PRESS_SECONDS", "0.12"))
@@ -2938,6 +3010,7 @@ def main():
 if __name__ == "__main__":
     sys.exit(main())
 RK_POWERKEY_LONGPRESS
+rk_fill_user "${ROOTFS_MNT}/usr/local/sbin/rk-powerkey-longpress.py"
 chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-powerkey-longpress.py"
 
 cat > "${ROOTFS_MNT}/etc/systemd/system/rk-powerkey-longpress.service" << 'RK_POWERKEY_LONGPRESS_UNIT'
@@ -4067,7 +4140,7 @@ set -eu
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-TARGET_USER="${RK_AUDIO_USER:-chaos}"
+TARGET_USER="${RK_AUDIO_USER:-@RKDEBIAN_USER@}"
 LOG_FILE="/var/log/rk-audio-resume.log"
 CARD_NAME="alsa_card.platform-rk817-sound"
 
@@ -4260,6 +4333,7 @@ esac
 
 exit 0
 RK_AUDIO_RESUME
+rk_fill_user "${ROOTFS_MNT}/usr/local/sbin/rk-audio-resume.sh"
 chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-audio-resume.sh"
 
 mkdir -p "${ROOTFS_MNT}/lib/systemd/system-sleep"
@@ -4316,6 +4390,7 @@ if [ -f "${ROOT_DIR}/overlay/camera-isp-setup.sh" ] && \
     fi
 
     cp "${ROOT_DIR}/overlay/camera-isp-setup.sh" "${ROOTFS_MNT}/usr/local/bin/camera-isp-setup.sh"
+    rk_fill_user "${ROOTFS_MNT}/usr/local/bin/camera-isp-setup.sh"
     chmod +x "${ROOTFS_MNT}/usr/local/bin/camera-isp-setup.sh"
     cp "${ROOT_DIR}/overlay/camera-isp-setup.service" "${ROOTFS_MNT}/etc/systemd/system/camera-isp-setup.service"
     chroot "${ROOTFS_MNT}" systemctl enable camera-isp-setup.service
@@ -4346,8 +4421,8 @@ if [ -n "${RK_CC_ADDED_PKGS// /}" ]; then
 fi
 
 # Install rkisp1-awb as a user service that runs alongside rkcam-webcam
-mkdir -p "${ROOTFS_MNT}/home/chaos/.config/systemd/user/rkcam-webcam.service.wants"
-cat > "${ROOTFS_MNT}/home/chaos/.config/systemd/user/rkisp1-awb.service" << 'RKISP1_AWB_UNIT'
+mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants"
+cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service" << 'RKISP1_AWB_UNIT'
 [Unit]
 Description=RkISP1 AWB gain feeder for front camera (s5k5e8)
 After=rkcam-webcam.service
@@ -4363,11 +4438,11 @@ RestartSec=1
 [Install]
 WantedBy=rkcam-webcam.service
 RKISP1_AWB_UNIT
-ln -sfn /home/chaos/.config/systemd/user/rkisp1-awb.service \
-    "${ROOTFS_MNT}/home/chaos/.config/systemd/user/rkcam-webcam.service.wants/rkisp1-awb.service"
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos \
-    /home/chaos/.config/systemd/user/rkisp1-awb.service \
-    /home/chaos/.config/systemd/user/rkcam-webcam.service.wants || true
+ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants/rkisp1-awb.service"
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants || true
 
 # 10b. (removed) rk817-hard-poweroff userspace service was removed.
 # The kernel's rk817_battery_shutdown() now saves dsoc/capacity before
@@ -4840,9 +4915,9 @@ ARMED_FILE="${STATE_DIR}/armed"
 [ -f "${ARMED_FILE}" ] || exit 0
 
 if [ -f /etc/lightdm/lightdm.conf ] && grep -q '^autologin-session=phosh$' /etc/lightdm/lightdm.conf; then
-    if loginctl list-sessions --no-legend 2>/dev/null | awk '$3=="chaos"{found=1} END{exit(found?0:1)}'; then
-        if pgrep -u chaos -f '/usr/libexec/phosh' >/dev/null 2>&1 || \
-           pgrep -u chaos -x phoc >/dev/null 2>&1; then
+    if loginctl list-sessions --no-legend 2>/dev/null | awk '$3=="@RKDEBIAN_USER@"{found=1} END{exit(found?0:1)}'; then
+        if pgrep -u @RKDEBIAN_USER@ -f '/usr/libexec/phosh' >/dev/null 2>&1 || \
+           pgrep -u @RKDEBIAN_USER@ -x phoc >/dev/null 2>&1; then
             rm -f "${ARMED_FILE}"
             logger -t rk-session-failsafe "Phosh session detected; disarmed watchdog without rollback"
             exit 0
@@ -4858,7 +4933,7 @@ minimum-vt=1
 [Seat:*]
 type=local
 user-session=phosh
-autologin-user=chaos
+autologin-user=@RKDEBIAN_USER@
 autologin-session=phosh
 session-wrapper=/etc/X11/Xsession
 
@@ -4876,6 +4951,7 @@ rm -f "${ARMED_FILE}"
 logger -t rk-session-failsafe "Rollback to phosh triggered; rebooting"
 systemctl --no-block reboot
 RK_SESSION_FAILSAFE
+rk_fill_user "${ROOTFS_MNT}/usr/local/sbin/rk-session-failsafe.sh"
 chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-session-failsafe.sh"
 
 cat > "${ROOTFS_MNT}/etc/systemd/system/rk-session-failsafe.service" << 'RK_SESSION_FAILSAFE_UNIT'
@@ -4913,7 +4989,7 @@ set -euo pipefail
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 LOG_FILE="/var/log/rk-update.log"
-INBOX_DIRS=(/update/pending /home/chaos/update)
+INBOX_DIRS=(/update/pending /home/@RKDEBIAN_USER@/update)
 COMPAT_FILE="/update/update.tar.gz"
 ARCHIVE_DIR="/update/applied"
 FAILED_DIR="/update/failed"
@@ -5168,6 +5244,7 @@ fi
 
 exit 0
 RK_APPLY_UPDATE
+rk_fill_user "${ROOTFS_MNT}/usr/local/sbin/rk-apply-update.sh"
 chmod +x "${ROOTFS_MNT}/usr/local/sbin/rk-apply-update.sh"
 
 cat > "${ROOTFS_MNT}/etc/systemd/system/rk-apply-update.service" << 'RK_APPLY_UPDATE_UNIT'
@@ -5197,16 +5274,17 @@ mkdir -p "${ROOTFS_MNT}/update/pending" "${ROOTFS_MNT}/update/applied" "${ROOTFS
 cat > "${ROOTFS_MNT}/update/README.txt" << 'RK_UPDATE_README'
 Drop update package in one of these folders:
 - /update/pending  (recommended)
-- /home/chaos/update
+- /home/@RKDEBIAN_USER@/update
 
 No extra command is needed.
 On next boot, rk-apply-update.service applies the newest .tar.gz/.tgz package automatically.
 Compatibility: /update/update.tar.gz is also checked.
 During apply, plymouth spinner is stopped and progress is logged in /var/log/rk-update.log.
 RK_UPDATE_README
-chroot "${ROOTFS_MNT}" chown -R chaos:chaos /update || true
+rk_fill_user "${ROOTFS_MNT}/update/README.txt"
+chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" /update || true
 chroot "${ROOTFS_MNT}" chmod 0775 /update || true
-chroot "${ROOTFS_MNT}" install -d -m 0775 -o chaos -g chaos /home/chaos/update || true
+chroot "${ROOTFS_MNT}" install -d -m 0775 -o "${RKDEBIAN_USER}" -g "${RKDEBIAN_USER}" /home/${RKDEBIAN_USER}/update || true
 
 # 12. Expand rootfs service
 echo "[*] Adding first-boot rootfs expand..."

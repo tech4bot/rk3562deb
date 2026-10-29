@@ -39,7 +39,7 @@ run_user_systemctl() {
     if [ "$(id -u)" -ne 0 ]; then
         return 1
     fi
-    user="${CAMERA_USER:-chaos}"
+    user="${CAMERA_USER:-@RKDEBIAN_USER@}"
     uid="$(id -u "${user}" 2>/dev/null || true)"
     if [ -z "${uid}" ] || [ ! -S "/run/user/${uid}/bus" ]; then
         return 1
