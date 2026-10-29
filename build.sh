@@ -393,24 +393,32 @@ run_build_rootfs() {
 }
 
 apply_local_uboot_patches() {
-    local patch_file="${ROOT_DIR}/patches/0001-u-boot-make.sh-only-require-python2-for-legacy-generators.patch"
+    local patch_file
+    local patches=(
+        "${ROOT_DIR}/patches/0001-u-boot-make.sh-only-require-python2-for-legacy-generators.patch"
+        # fit_nodes.sh runs decode_bl31.py directly; without python2 on the
+        # host the ATF image is silently left out of u-boot.itb.
+        "${ROOT_DIR}/patches/0004-u-boot-decode_bl31-use-python3.patch"
+    )
 
-    if [ ! -f "${patch_file}" ]; then
-        return 0
-    fi
+    for patch_file in "${patches[@]}"; do
+        if [ ! -f "${patch_file}" ]; then
+            continue
+        fi
 
-    echo "[*] Checking local U-Boot patch: $(basename "${patch_file}")"
-    if git apply --check "${patch_file}" >/dev/null 2>&1; then
-        git apply "${patch_file}"
-        echo "[+] Applied local U-Boot patch."
-    elif git apply -R --check "${patch_file}" >/dev/null 2>&1; then
-        echo "[*] Local U-Boot patch already applied."
-    else
-        echo "[-] Error: unable to apply local U-Boot patch."
-        echo "    Patch: ${patch_file}"
-        echo "    Hint: ensure u-boot/make.sh matches expected base or apply manually."
-        exit 1
-    fi
+        echo "[*] Checking local U-Boot patch: $(basename "${patch_file}")"
+        if git apply --check "${patch_file}" >/dev/null 2>&1; then
+            git apply "${patch_file}"
+            echo "[+] Applied local U-Boot patch."
+        elif git apply -R --check "${patch_file}" >/dev/null 2>&1; then
+            echo "[*] Local U-Boot patch already applied."
+        else
+            echo "[-] Error: unable to apply local U-Boot patch."
+            echo "    Patch: ${patch_file}"
+            echo "    Hint: ensure the u-boot tree matches the expected base or apply manually."
+            exit 1
+        fi
+    done
 }
 
 build_uboot() {
@@ -522,6 +530,12 @@ build_uboot() {
     else
         echo "[+] Using loader artifact: ${spl_loader}"
         cp "${spl_loader}" "${OUT_DIR}/idbloader.img"
+    fi
+    # make.sh reports success even when bl31 extraction fails, leaving a FIT
+    # whose config references a missing atf-1 image (unbootable).
+    if ! tools/mkimage -l uboot.img | grep -q "ARM Trusted Firmware"; then
+        echo "[-] Error: uboot.img has no ARM Trusted Firmware image (bl31 extraction failed)."
+        exit 1
     fi
     cp uboot.img "${OUT_DIR}/u-boot.itb"
     
@@ -796,6 +810,16 @@ build_kernel() {
         scripts/config --set-str EXTRA_FIRMWARE_DIR "firmware" || true
 
         RKDEBIAN_ALLOW_WARNINGS=1 make ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE} olddefconfig
+    fi
+
+    # The kernel 6.1 host tool certs/extract-cert.c includes openssl/engine.h.
+    # Fedora 41+ moved that header out of openssl-devel, so check for it here
+    # instead of failing deep inside the kernel build.
+    if ! echo '#include <openssl/engine.h>' | ${HOSTCC:-gcc} -E -x c - >/dev/null 2>&1; then
+        echo "[-] Error: host header openssl/engine.h is missing (needed by certs/extract-cert)."
+        echo "    Fedora: sudo dnf install openssl-devel-engine"
+        echo "    Debian/Ubuntu: sudo apt-get install libssl-dev"
+        exit 1
     fi
 
     RKDEBIAN_ALLOW_WARNINGS=1 make ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE} WERROR=0 -j${MAKE_THREADS} Image dtbs modules

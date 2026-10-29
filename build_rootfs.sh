@@ -4273,15 +4273,44 @@ chmod +x "${ROOTFS_MNT}/lib/systemd/system-sleep/rk-audio-resume"
 chroot "${ROOTFS_MNT}" systemctl disable usb-role-manager.service usb-force-host.service usb-otg-host.service >/dev/null 2>&1 || true
 
 
+# 10a. Native toolchain for the small camera helpers below.
+# Compile inside the arm64 rootfs instead of with the host cross compiler:
+# Fedora's aarch64-linux-gnu-gcc has no target libc, and the rootfs carries no
+# libc headers by default. Only the packages added here are removed afterwards.
+RK_CC_READY=0
+RK_CC_ADDED_PKGS=""
+if [ -f "${ROOT_DIR}/tools/config_isp.c" ] || [ -f "${ROOT_DIR}/tools/rkisp1_awb.c" ]; then
+    echo "[*] Installing temporary native toolchain in rootfs..."
+    rk_pkgs_before=$(chroot "${ROOTFS_MNT}" dpkg-query -W -f='${Package}\n' | sort)
+    if chroot "${ROOTFS_MNT}" env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends gcc libc6-dev; then
+        RK_CC_READY=1
+    else
+        echo "[!] Warning: could not install gcc/libc6-dev in rootfs."
+    fi
+    RK_CC_ADDED_PKGS=$(comm -13 <(echo "${rk_pkgs_before}") \
+        <(chroot "${ROOTFS_MNT}" dpkg-query -W -f='${Package}\n' | sort) | tr '\n' ' ')
+fi
+
+# rk_chroot_cc <source.c> <installed binary path inside rootfs>
+rk_chroot_cc() {
+    local src="$1" out="$2" name
+    [ "${RK_CC_READY}" = "1" ] || return 1
+    name=$(basename "${src}")
+    cp "${src}" "${ROOTFS_MNT}/tmp/${name}"
+    chroot "${ROOTFS_MNT}" gcc -O2 -o "${out}" "/tmp/${name}"
+    local ret=$?
+    rm -f "${ROOTFS_MNT}/tmp/${name}"
+    return ${ret}
+}
+
 # 10b. Front camera ISP setup service (s5k5e8 → rkisp → /dev/video23)
 if [ -f "${ROOT_DIR}/overlay/camera-isp-setup.sh" ] && \
    [ -f "${ROOT_DIR}/overlay/camera-isp-setup.service" ]; then
     echo "[*] Installing front camera ISP setup service..."
 
-    # Cross-compile config_isp helper if source is present and cross-compiler available
-    if [ -f "${ROOT_DIR}/tools/config_isp.c" ] && command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
-        aarch64-linux-gnu-gcc -O2 -o "${ROOTFS_MNT}/usr/local/bin/config_isp" \
-            "${ROOT_DIR}/tools/config_isp.c" && \
+    if [ -f "${ROOT_DIR}/tools/config_isp.c" ]; then
+        rk_chroot_cc "${ROOT_DIR}/tools/config_isp.c" /usr/local/bin/config_isp && \
             echo "[*] config_isp compiled for arm64" || \
             echo "[!] Warning: config_isp compilation failed — ISP crop reset won't run"
     fi
@@ -4301,12 +4330,19 @@ fi
 # 10b-awb. ISP AWB gain feeder (rkisp1-awb) — provides color to s5k5e8 front camera
 # The rkisp_v8 vendor ISP defaults to zero AWB gains (monochrome output).
 # rkisp1-awb feeds R/Gr/Gb/B gain params per-frame via /dev/video28.
-if [ -f "${ROOT_DIR}/tools/rkisp1_awb.c" ] && command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+if [ -f "${ROOT_DIR}/tools/rkisp1_awb.c" ]; then
     echo "[*] Compiling rkisp1-awb AWB gain feeder..."
-    aarch64-linux-gnu-gcc -O2 -o "${ROOTFS_MNT}/usr/local/bin/rkisp1-awb" \
-        "${ROOT_DIR}/tools/rkisp1_awb.c" && \
+    rk_chroot_cc "${ROOT_DIR}/tools/rkisp1_awb.c" /usr/local/bin/rkisp1-awb && \
         echo "[*] rkisp1-awb compiled for arm64" || \
         echo "[!] Warning: rkisp1-awb compilation failed — front camera will show monochrome"
+fi
+
+if [ -n "${RK_CC_ADDED_PKGS// /}" ]; then
+    echo "[*] Removing temporary toolchain: ${RK_CC_ADDED_PKGS}"
+    # shellcheck disable=SC2086
+    chroot "${ROOTFS_MNT}" env DEBIAN_FRONTEND=noninteractive \
+        apt-get purge -y ${RK_CC_ADDED_PKGS} || \
+        echo "[!] Warning: could not remove temporary toolchain packages."
 fi
 
 # Install rkisp1-awb as a user service that runs alongside rkcam-webcam
