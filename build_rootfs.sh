@@ -2371,6 +2371,8 @@ mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin"
 rm -f "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh"
 install -m 0755 "${ROOT_DIR}/overlay/rkcam-webcam.py" \
     "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.py"
+install -m 0644 "${ROOT_DIR}/overlay/rkcam_awb.py" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam_awb.py"
 
 mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants"
 cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service" << 'RKCAM_WEBCAM_UNIT'
@@ -2395,6 +2397,7 @@ ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
 
 chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
     /home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.py \
+    /home/${RKDEBIAN_USER}/.local/bin/rkcam_awb.py \
     /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
     /home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rkcam-webcam.service || true
 
@@ -2449,6 +2452,8 @@ if [ -f "${ROOT_DIR}/overlay/rkcam-rear-preview.sh" ] && \
     cp "${ROOT_DIR}/overlay/rkcam-rear-preview.sh" \
        "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-preview.sh"
     chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-preview.sh"
+    install -m 0755 "${ROOT_DIR}/overlay/rkcam-rear-view.py" \
+        "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-view.py"
 
     cp "${ROOT_DIR}/overlay/rkcam-rear-preview.desktop" \
        "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications/rkcam-rear-preview.desktop"
@@ -2460,6 +2465,7 @@ if [ -f "${ROOT_DIR}/overlay/rkcam-rear-preview.sh" ] && \
 
     chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
         /home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-preview.sh \
+        /home/${RKDEBIAN_USER}/.local/bin/rkcam-rear-view.py \
         /home/${RKDEBIAN_USER}/.local/share/applications/rkcam-rear-preview.desktop \
         /home/${RKDEBIAN_USER}/Desktop/Rear-Camera-Preview.desktop || true
 fi

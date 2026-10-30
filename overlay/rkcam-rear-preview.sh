@@ -96,14 +96,13 @@ if ! command -v gst-launch-1.0 >/dev/null 2>&1; then
     exit 1
 fi
 
+VIEWER="${REAR_VIEWER:-$(dirname "$(readlink -f "$0")")/rkcam-rear-view.py}"
+
 run_gst() {
     local sink="$1"
     log "backend=gstreamer sink=${sink}"
-    gst-launch-1.0 --no-fault -q \
-      v4l2src device="${DEVICE}" io-mode=0 do-timestamp=true ! \
-      video/x-raw,format=NV12,width=${W},height=${H},framerate=${FPS}/1 ! \
-      queue max-size-buffers=4 leaky=downstream ! \
-      videoconvert ! "${sink}" sync=false
+    # The viewer also runs the rear camera's automatic white balance.
+    python3 "${VIEWER}" "${DEVICE}" "${W}" "${H}" "${FPS}" "${sink}"
 }
 
 log "Opening rear camera preview from ${DEVICE} (${W}x${H}@${FPS}fps)"

@@ -23,6 +23,8 @@ import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import GLib, Gst  # noqa: E402
 
+import rkcam_awb  # noqa: E402
+
 DEVICE = "/dev/video23"
 NODE = "rkcam-webcam"
 WIDTH, HEIGHT, FPS = 1280, 720, 30
@@ -32,15 +34,9 @@ AWB_UNIT = "rkisp1-awb.service"
 STOP_DELAY_S = 3
 RETRY_DELAY_S = 2
 
-# Gains are Q8 (256 = 1.0x); the file is shared with rkisp1-awb and keeps the
-# last result so the next session starts from it.
+# Shared with rkisp1-awb; see rkcam_awb.py.
 GAINS_FILE = os.path.expanduser("~/.cache/rkcam-webcam/awb-gains")
 DEFAULT_GAINS = (512, 256, 256, 640)
-GAIN_MIN, GAIN_MAX = 64, 4095
-AWB_EVERY = 15          # frames between white balance updates (~2 per second)
-AWB_STRIDE = 97         # sample every 97th UYVY macropixel (~4.7k samples)
-AWB_DEADBAND = 2        # mean U/V distance from neutral (128) left alone
-AWB_MAX_STEP = 1.25     # largest gain change per update
 
 
 def log(msg):
@@ -66,54 +62,6 @@ def set_crop_16_9(device):
                     f"target=crop,left={left},top={top},width={crop_w},height={crop_h}"])
 
 
-class WhiteBalance:
-    """Gray-world AWB: steer mean U/V of mid-tone pixels towards neutral."""
-
-    def __init__(self):
-        self.gains = list(DEFAULT_GAINS)
-        try:
-            with open(GAINS_FILE) as f:
-                gains = [int(v) for v in f.read().split()]
-            if len(gains) == 4 and all(GAIN_MIN <= g <= GAIN_MAX for g in gains):
-                self.gains = gains
-        except (OSError, ValueError):
-            pass
-        self.save()
-
-    def save(self):
-        os.makedirs(os.path.dirname(GAINS_FILE), exist_ok=True)
-        tmp = GAINS_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            f.write(" ".join(str(g) for g in self.gains) + "\n")
-        os.replace(tmp, GAINS_FILE)
-
-    def update(self, uyvy):
-        step = 4 * AWB_STRIDE
-        us, ys, vs = uyvy[0::step], uyvy[1::step], uyvy[2::step]
-        n = sum_y = sum_u = sum_v = 0
-        for u, y, v in zip(us, ys, vs):
-            if 40 <= y <= 220:  # skip near-black noise and clipped highlights
-                n += 1
-                sum_y += y
-                sum_u += u
-                sum_v += v
-        if n < 200:
-            return
-        y, du, dv = sum_y / n, sum_u / n - 128, sum_v / n - 128
-        if abs(du) <= AWB_DEADBAND and abs(dv) <= AWB_DEADBAND:
-            return
-        # U ~ 0.564 (B - Y), V ~ 0.713 (R - Y): scale blue/red so they meet Y.
-        # Half of the correction per step (square root) keeps the loop calm.
-        gains = self.gains[:]
-        for idx, d, k in ((3, du, 0.564), (0, dv, 0.713)):
-            factor = (y / max(y + d / k, 1.0)) ** 0.5
-            factor = min(max(factor, 1 / AWB_MAX_STEP), AWB_MAX_STEP)
-            gains[idx] = int(min(max(gains[idx] * factor, GAIN_MIN), GAIN_MAX))
-        if gains != self.gains:
-            self.gains = gains
-            self.save()
-
-
 class Bridge:
     def __init__(self):
         self.out = None
@@ -125,7 +73,7 @@ class Bridge:
         self.retry_source = 0
         self.decoder = json.JSONDecoder()
         self.pending = ""
-        self.awb = WhiteBalance()
+        self.awb = rkcam_awb.WhiteBalance(GAINS_FILE, DEFAULT_GAINS)
         self.frames = 0
 
     def start(self):
@@ -259,11 +207,11 @@ class Bridge:
             return Gst.FlowReturn.OK
         frame = sample.get_buffer()
         self.frames += 1
-        if self.frames % AWB_EVERY == 0:
+        if self.frames % rkcam_awb.EVERY == 0:
             ok, info = frame.map(Gst.MapFlags.READ)
             if ok:
                 try:
-                    self.awb.update(info.data)
+                    self.awb.update(rkcam_awb.sample_uyvy(info.data))
                 finally:
                     frame.unmap(info)
         buf = frame.copy()
