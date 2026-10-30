@@ -777,6 +777,14 @@ build_kernel() {
         scripts/config --enable SND_SOC_ROCKCHIP_MULTI_DAIS || true
         scripts/config --enable SND_SOC_ROCKCHIP_PDM_V2 || true
         scripts/config --enable SND_SOC_ROCKCHIP_TRCM || true
+        # Debugging aids for freezes that leave nothing on the SD card: kernel
+        # log over UDP (netconsole, configured at runtime through configfs)
+        # and warnings for tasks or CPUs stuck for too long.
+        scripts/config --module NETCONSOLE || true
+        scripts/config --enable NETCONSOLE_DYNAMIC || true
+        scripts/config --enable SOFTLOCKUP_DETECTOR || true
+        scripts/config --enable DETECT_HUNG_TASK || true
+        scripts/config --set-val DEFAULT_HUNG_TASK_TIMEOUT 60 || true
         # Avoid black screen before userspace by enabling early fb console/logo.
         scripts/config --enable FRAMEBUFFER_CONSOLE || true
         scripts/config --enable LOGO || true
