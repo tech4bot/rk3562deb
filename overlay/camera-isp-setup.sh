@@ -84,10 +84,7 @@ stop_user_camera_services() {
 start_user_camera_services() {
     [ "${FRONT_RESTART_USER_SERVICES:-1}" = "1" ] || return 0
 
-    # AWB first, then webcam bridge.
-    if run_user_systemctl start rkisp1-awb.service; then
-        log "started user service: rkisp1-awb.service"
-    fi
+    # The bridge starts rkisp1-awb itself while a client uses the camera.
     if run_user_systemctl start rkcam-webcam.service; then
         log "started user service: rkcam-webcam.service"
     fi

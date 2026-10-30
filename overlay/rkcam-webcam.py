@@ -6,6 +6,12 @@ open, so GStreamer offers the camera to PipeWire instead. Rather than streaming
 permanently, the PipeWire source is fed from an appsrc and the camera (and the
 rkisp1-awb gain feeder) only run while a client is linked to the source.
 An always-running camera costs about 100 mA at idle on the Doogee U10.
+
+While streaming, the bridge also
+- crops the 4:3 sensor image to a centered 16:9 window, so 1280x720 is not
+  stretched horizontally, and
+- runs a gray-world auto white balance on the frames it forwards, handing new
+  red/blue gains to rkisp1-awb through a gains file (there is no 3A daemon).
 """
 import json
 import os
@@ -25,9 +31,86 @@ AWB_UNIT = "rkisp1-awb.service"
 STOP_DELAY_S = 3
 RETRY_DELAY_S = 2
 
+# Gains are Q8 (256 = 1.0x); the file is shared with rkisp1-awb and keeps the
+# last result so the next session starts from it.
+GAINS_FILE = os.path.expanduser("~/.cache/rkcam-webcam/awb-gains")
+DEFAULT_GAINS = (512, 256, 256, 640)
+GAIN_MIN, GAIN_MAX = 64, 4095
+AWB_EVERY = 15          # frames between white balance updates (~2 per second)
+AWB_STRIDE = 97         # sample every 97th UYVY macropixel (~4.7k samples)
+AWB_DEADBAND = 2        # mean U/V distance from neutral (128) left alone
+AWB_MAX_STEP = 1.25     # largest gain change per update
+
 
 def log(msg):
     print(f"rkcam-webcam: {msg}", file=sys.stderr, flush=True)
+
+
+def set_crop_16_9(device):
+    """Crop the selfpath input to a centered 16:9 window of the sensor image."""
+    out = subprocess.run(["v4l2-ctl", "-d", device, "--get-selection",
+                          "target=crop_bounds"], capture_output=True, text=True)
+    fields = dict(part.strip().split(" ", 1)
+                  for part in out.stdout.split(":", 1)[-1].split(",") if " " in part.strip())
+    try:
+        width, height = int(fields["Width"]), int(fields["Height"])
+    except (KeyError, ValueError):
+        log("crop bounds unavailable, keeping full sensor image")
+        return
+    crop_w, crop_h = width, width * 9 // 16 // 2 * 2
+    if crop_h > height:
+        crop_w, crop_h = height * 16 // 9 // 2 * 2, height
+    left, top = (width - crop_w) // 2 // 2 * 2, (height - crop_h) // 2 // 2 * 2
+    subprocess.run(["v4l2-ctl", "-d", device, "--set-selection",
+                    f"target=crop,left={left},top={top},width={crop_w},height={crop_h}"])
+
+
+class WhiteBalance:
+    """Gray-world AWB: steer mean U/V of mid-tone pixels towards neutral."""
+
+    def __init__(self):
+        self.gains = list(DEFAULT_GAINS)
+        try:
+            with open(GAINS_FILE) as f:
+                gains = [int(v) for v in f.read().split()]
+            if len(gains) == 4 and all(GAIN_MIN <= g <= GAIN_MAX for g in gains):
+                self.gains = gains
+        except (OSError, ValueError):
+            pass
+        self.save()
+
+    def save(self):
+        os.makedirs(os.path.dirname(GAINS_FILE), exist_ok=True)
+        tmp = GAINS_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            f.write(" ".join(str(g) for g in self.gains) + "\n")
+        os.replace(tmp, GAINS_FILE)
+
+    def update(self, uyvy):
+        step = 4 * AWB_STRIDE
+        us, ys, vs = uyvy[0::step], uyvy[1::step], uyvy[2::step]
+        n = sum_y = sum_u = sum_v = 0
+        for u, y, v in zip(us, ys, vs):
+            if 40 <= y <= 220:  # skip near-black noise and clipped highlights
+                n += 1
+                sum_y += y
+                sum_u += u
+                sum_v += v
+        if n < 200:
+            return
+        y, du, dv = sum_y / n, sum_u / n - 128, sum_v / n - 128
+        if abs(du) <= AWB_DEADBAND and abs(dv) <= AWB_DEADBAND:
+            return
+        # U ~ 0.564 (B - Y), V ~ 0.713 (R - Y): scale blue/red so they meet Y.
+        # Half of the correction per step (square root) keeps the loop calm.
+        gains = self.gains[:]
+        for idx, d, k in ((3, du, 0.564), (0, dv, 0.713)):
+            factor = (y / max(y + d / k, 1.0)) ** 0.5
+            factor = min(max(factor, 1 / AWB_MAX_STEP), AWB_MAX_STEP)
+            gains[idx] = int(min(max(gains[idx] * factor, GAIN_MIN), GAIN_MAX))
+        if gains != self.gains:
+            self.gains = gains
+            self.save()
 
 
 class Bridge:
@@ -41,6 +124,8 @@ class Bridge:
         self.retry_source = 0
         self.decoder = json.JSONDecoder()
         self.pending = ""
+        self.awb = WhiteBalance()
+        self.frames = 0
 
     def start(self):
         self.output_on()
@@ -128,6 +213,8 @@ class Bridge:
         if self.cam:
             return
         log("client connected, starting camera")
+        set_crop_16_9(DEVICE)
+        self.frames = 0
         self.cam = Gst.parse_launch(
             f"v4l2src device={DEVICE} io-mode=0 ! {CAPS} ! "
             "queue max-size-buffers=4 leaky=downstream ! "
@@ -149,10 +236,20 @@ class Bridge:
 
     def on_sample(self, sink):
         sample = sink.emit("pull-sample")
-        if sample:
-            buf = sample.get_buffer().copy()
-            buf.pts = buf.dts = Gst.CLOCK_TIME_NONE  # appsrc re-timestamps
-            self.src.emit("push-buffer", buf)
+        if not sample:
+            return Gst.FlowReturn.OK
+        frame = sample.get_buffer()
+        self.frames += 1
+        if self.frames % AWB_EVERY == 0:
+            ok, info = frame.map(Gst.MapFlags.READ)
+            if ok:
+                try:
+                    self.awb.update(info.data)
+                finally:
+                    frame.unmap(info)
+        buf = frame.copy()
+        buf.pts = buf.dts = Gst.CLOCK_TIME_NONE  # appsrc re-timestamps
+        self.src.emit("push-buffer", buf)
         return Gst.FlowReturn.OK
 
     def on_camera_error(self, bus, msg):

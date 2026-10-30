@@ -2402,61 +2402,18 @@ chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
 mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/share/applications"
 cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/front-camera-preview.sh" << 'FRONT_CAM_PREVIEW'
 #!/bin/sh
+# Live front camera preview through the rkcam-webcam PipeWire bridge, so it
+# gets the same 16:9 crop and automatic white balance as every other app.
 set -eu
 
-PATH=/usr/local/bin:/usr/bin:/bin
 export DISPLAY="${DISPLAY:-:0}"
-export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
-MEDIA_DEV=""
-for dev in /dev/media0 /dev/media1 /dev/media2; do
-    [ -e "$dev" ] || continue
-    if media-ctl -d "$dev" -p 2>/dev/null | grep -q 'rkisp-isp-subdev'; then
-        MEDIA_DEV="$dev"
-        break
-    fi
-done
+systemctl --user start rkcam-webcam.service >/dev/null 2>&1 || true
 
-if [ -z "$MEDIA_DEV" ]; then
-    echo "[front-camera-preview] ERROR: rkisp media graph not found"
-    exit 1
-fi
-
-# Keep webcam bridge from competing for /dev/video23 during preview.
-systemctl --user stop rkcam-webcam.service >/dev/null 2>&1 || true
-killall gst-launch-1.0 >/dev/null 2>&1 || true
-
-# Force front route + stable front ISP dimensions.
-media-ctl -d "$MEDIA_DEV" --links '"rkcif-mipi-lvds":0->"rkisp-isp-subdev":0[0]' >/dev/null 2>&1 || true
-media-ctl -d "$MEDIA_DEV" --links '"rkcif-mipi-lvds2":0->"rkisp-isp-subdev":0[1]' >/dev/null 2>&1 || true
-media-ctl -d "$MEDIA_DEV" --set-v4l2 '"rkcif-mipi-lvds2":0[fmt:SGRBG10_1X10/2592x1944]' >/dev/null 2>&1 || true
-media-ctl -d "$MEDIA_DEV" --set-v4l2 '"rkisp-isp-subdev":0[fmt:SGRBG10_1X10/2592x1944 crop:(0,0)/2592x1944]' >/dev/null 2>&1 || true
-media-ctl -d "$MEDIA_DEV" --set-v4l2 '"rkisp-isp-subdev":2[fmt:YUYV8_2X8/2592x1944 crop:(0,0)/2592x1944]' >/dev/null 2>&1 || true
-
-# Keep image visible when no 3A daemon is active.
-v4l2-ctl -d /dev/v4l-subdev6 -c test_pattern=0 >/dev/null 2>&1 || true
-v4l2-ctl -d /dev/v4l-subdev6 -c exposure=1964 >/dev/null 2>&1 || true
-v4l2-ctl -d /dev/v4l-subdev6 -c analogue_gain=1024 >/dev/null 2>&1 || true
-v4l2-ctl -d /dev/video23 --set-fmt-video=width=1280,height=720,pixelformat=UYVY >/dev/null 2>&1 || true
-
-# Start ISP AWB gain feeder so the ISP outputs real color (not monochrome).
-# Without this, rkisp_v8 defaults to zero AWB gains → U=V=128 (gray output).
-AWB_PID=""
-if command -v rkisp1-awb >/dev/null 2>&1; then
-    rkisp1-awb 512 256 256 640 &
-    AWB_PID="$!"
-fi
-
-cleanup() {
-    [ -n "$AWB_PID" ] && kill "$AWB_PID" 2>/dev/null || true
-    systemctl --user restart rkcam-webcam.service >/dev/null 2>&1 || true
-}
-trap cleanup EXIT INT TERM
-
-gst-launch-1.0 --no-fault \
-  v4l2src device=/dev/video23 io-mode=0 do-timestamp=true ! \
-  video/x-raw,format=UYVY,width=1280,height=720,framerate=15/1 ! \
+exec gst-launch-1.0 --no-fault \
+  pipewiresrc target-object=rkcam-webcam \
+    stream-properties="props,media.type=Video,media.category=Capture,media.role=Camera" ! \
   videoconvert ! ximagesink sync=false
 FRONT_CAM_PREVIEW
 chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/front-camera-preview.sh"
@@ -4358,15 +4315,21 @@ if [ -f "${ROOT_DIR}/tools/config_isp.c" ] || [ -f "${ROOT_DIR}/tools/rkisp1_awb
         <(chroot "${ROOTFS_MNT}" dpkg-query -W -f='${Package}\n' | sort) | tr '\n' ' ')
 fi
 
-# rk_chroot_cc <source.c> <installed binary path inside rootfs>
+# rk_chroot_cc <source.c> <installed binary path inside rootfs> [include dir]
 rk_chroot_cc() {
-    local src="$1" out="$2" name
+    local src="$1" out="$2" inc="${3:-}" name
+    local cflags=(-O2)
     [ "${RK_CC_READY}" = "1" ] || return 1
     name=$(basename "${src}")
     cp "${src}" "${ROOTFS_MNT}/tmp/${name}"
-    chroot "${ROOTFS_MNT}" gcc -O2 -o "${out}" "/tmp/${name}"
+    if [ -n "${inc}" ]; then
+        rm -rf "${ROOTFS_MNT}/tmp/rk-include"
+        cp -r "${inc}" "${ROOTFS_MNT}/tmp/rk-include"
+        cflags+=(-I/tmp/rk-include)
+    fi
+    chroot "${ROOTFS_MNT}" gcc "${cflags[@]}" -o "${out}" "/tmp/${name}"
     local ret=$?
-    rm -f "${ROOTFS_MNT}/tmp/${name}"
+    rm -rf "${ROOTFS_MNT}/tmp/${name}" "${ROOTFS_MNT}/tmp/rk-include"
     return ${ret}
 }
 
@@ -4394,14 +4357,16 @@ if [ -f "${ROOT_DIR}/tools/setup_isp_rear.sh" ]; then
     chmod +x "${ROOTFS_MNT}/usr/local/bin/setup_isp_rear.sh"
 fi
 
-# 10b-awb. ISP AWB gain feeder (rkisp1-awb) — provides color to s5k5e8 front camera
-# The rkisp_v8 vendor ISP defaults to zero AWB gains (monochrome output).
-# rkisp1-awb feeds R/Gr/Gb/B gain params per-frame via /dev/video28.
+# 10b-awb. ISP AWB gain feeder (rkisp1-awb) for the s5k5e8 front camera.
+# There is no 3A daemon: rkcam-webcam measures the frames and rkisp1-awb feeds
+# the resulting white balance gains per frame to the vendor ISP (/dev/video28)
+# in its own params format (struct isp32_isp_params_cfg, tools/include).
 if [ -f "${ROOT_DIR}/tools/rkisp1_awb.c" ]; then
     echo "[*] Compiling rkisp1-awb AWB gain feeder..."
-    rk_chroot_cc "${ROOT_DIR}/tools/rkisp1_awb.c" /usr/local/bin/rkisp1-awb && \
+    rk_chroot_cc "${ROOT_DIR}/tools/rkisp1_awb.c" /usr/local/bin/rkisp1-awb \
+        "${ROOT_DIR}/tools/include" && \
         echo "[*] rkisp1-awb compiled for arm64" || \
-        echo "[!] Warning: rkisp1-awb compilation failed — front camera will show monochrome"
+        echo "[!] Warning: rkisp1-awb compilation failed — front camera colors stay uncorrected"
 fi
 
 if [ -n "${RK_CC_ADDED_PKGS// /}" ]; then
@@ -4424,7 +4389,7 @@ BindsTo=rkcam-webcam.service
 [Service]
 Type=simple
 ExecStartPre=/bin/sleep 0.5
-ExecStart=/usr/local/bin/rkisp1-awb 512 256 256 640
+ExecStart=/usr/local/bin/rkisp1-awb 512 256 256 640 %h/.cache/rkcam-webcam/awb-gains
 Restart=on-failure
 RestartSec=1
 RKISP1_AWB_UNIT

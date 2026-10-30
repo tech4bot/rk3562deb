@@ -1,0 +1,4 @@
+Rockchip vendor ISP UAPI headers, copied unchanged from the pinned kernel
+(rockchip-linux/kernel develop-6.1, commit 8c290990fe7b45fc7ee8ee0896fddf822ac02b54,
+include/uapi/linux/). They describe the rkisp params/statistics buffers used by
+tools/rkisp1_awb.c and are not part of Debian's linux-libc-dev.
