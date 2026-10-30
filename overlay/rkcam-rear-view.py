@@ -41,7 +41,10 @@ class RearView:
             f"video/x-raw,format=NV12,width={width},height={height},"
             f"framerate={fps}/1 ! identity name=tap ! "
             "queue max-size-buffers=4 leaky=downstream ! "
-            f"videoconvert ! {sink} sync=false")
+            # videoscale: the window (1280x800 on the U10) is smaller than
+            # the frame, and ximagesink does not scale by itself; it showed a
+            # 1280x800 corner of the image, which looked zoomed in.
+            f"videoconvert ! videoscale ! {sink} sync=false")
         self.pipeline.get_by_name("tap").get_static_pad("src").add_probe(
             Gst.PadProbeType.BUFFER, self.on_buffer)
         bus = self.pipeline.get_bus()
