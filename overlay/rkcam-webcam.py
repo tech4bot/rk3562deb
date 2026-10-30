@@ -139,7 +139,10 @@ class Bridge:
     def output_on(self):
         self.out = Gst.parse_launch(
             "appsrc name=src is-live=true format=time do-timestamp=true ! "
-            "pipewiresink mode=provide sync=false stream-properties="
+            # enable-last-sample=false: the sink would otherwise keep the last
+            # camera frame, whose driver buffer keeps /dev/video23 mapped.
+            "pipewiresink mode=provide sync=false enable-last-sample=false "
+            "stream-properties="
             '"props,media.class=Video/Source,media.role=Camera,'
             f'node.name={NODE},node.description=Front_Camera,node.nick=Front_Camera"'
         )
@@ -266,9 +269,14 @@ class Bridge:
         return False
 
     def on_output_error(self, bus, msg):
-        # pipewiresink fails with "all buffers have been removed" whenever a
-        # client unlinks; recreate the source instead of exiting.
         err, _ = msg.parse_error()
+        # pipewiresink posts "all buffers have been removed" whenever its
+        # last client unlinks, including the probe connections apps make
+        # before the real one. The stream itself stays connected, so keep the
+        # same source: recreating it would give it a new node id and the
+        # app's real connection would go to the vanished one (black image).
+        if "all buffers have been removed" in err.message:
+            return
         log(f"pipewire output reset: {err.message}")
         self.wanted = False
         self.camera_off()
