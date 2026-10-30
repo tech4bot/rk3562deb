@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Rear camera preview window with automatic white balance and exposure.
+"""Rear camera preview window with automatic white balance, exposure and focus.
 
 Plays the rkisp output (NV12) once setup_isp_rear.sh has routed the ISP to the
 rear sensor. Like the front bridge, it runs a gray-world white balance on the
 frames it shows and feeds the resulting gains to the ISP through rkisp1-awb,
-with a gains file of its own (the rear sensor needs different gains), and
-sets the sensor's exposure time and gain from the frames' brightness.
+with a gains file of its own (the rear sensor needs different gains), sets
+the sensor's exposure time and gain from the frames' brightness, and focuses
+the lens on the sharpest position (contrast autofocus).
 
 Usage: rkcam-rear-view.py DEVICE WIDTH HEIGHT FPS SINK
 """
@@ -22,6 +23,7 @@ from gi.repository import GLib, Gst  # noqa: E402
 import rkcam_3a  # noqa: E402
 
 SENSOR = "s5k4h5yb"
+LENS = "fp5510"
 AWB_FEEDER = "/usr/local/bin/rkisp1-awb"
 GAINS_FILE = os.path.expanduser("~/.cache/rkcam-webcam/awb-gains-rear")
 DEFAULT_GAINS = (236, 256, 256, 389)  # converged under room light
@@ -36,6 +38,7 @@ class RearView:
         self.width, self.height = width, height
         self.awb = rkcam_3a.WhiteBalance(GAINS_FILE, DEFAULT_GAINS)
         self.ae = rkcam_3a.AutoExposure(SENSOR)
+        self.af = rkcam_3a.AutoFocus(LENS, width, height)
         self.frames = 0
         self.feeder = None
         self.rc = 0
@@ -63,6 +66,7 @@ class RearView:
             self.pipeline.set_state(Gst.State.NULL)
             self.feeder_stop()
             self.ae.close()
+            self.af.close()
         return self.rc
 
     def on_buffer(self, pad, info):
@@ -70,17 +74,19 @@ class RearView:
         if self.frames == 1:
             # The ISP is streaming now, so the feeder's params are consumed.
             GLib.idle_add(self.feeder_start)
-        if self.frames % rkcam_3a.EVERY == 0:
-            buf = info.get_buffer()
-            ok, mapping = buf.map(Gst.MapFlags.READ)
-            if ok:
-                try:
-                    samples = rkcam_3a.sample_nv12(
-                        mapping.data, self.width, self.height)
-                    self.awb.update(samples)
-                    self.ae.update(samples[0])
-                finally:
-                    buf.unmap(mapping)
+        buf = info.get_buffer()
+        ok, mapping = buf.map(Gst.MapFlags.READ)
+        if not ok:
+            return Gst.PadProbeReturn.OK
+        try:
+            if self.frames % rkcam_3a.EVERY == 0:
+                samples = rkcam_3a.sample_nv12(
+                    mapping.data, self.width, self.height)
+                self.awb.update(samples)
+                self.ae.update(samples[0])
+            self.af.update(mapping.data[:self.width * self.height])
+        finally:
+            buf.unmap(mapping)
         return Gst.PadProbeReturn.OK
 
     def feeder_start(self):

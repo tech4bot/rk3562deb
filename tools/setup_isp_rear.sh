@@ -217,6 +217,9 @@ else
 fi
 
 # Optional manual lens focus (VCM). Rear module exposes focus_absolute on fp5510.
+# Note: the fp5510 driver powers the coil only while its node is open, so this
+# position lasts only until v4l2-ctl exits; rkcam-rear-view.py keeps the node
+# open and runs autofocus.
 if [ -e "${FOCUS_SUBDEV}" ]; then
     REAR_FOCUS="${REAR_FOCUS:-64}"
     # v4l2-ctl exits non-zero (and prints an error on stdout) on these subdevs
