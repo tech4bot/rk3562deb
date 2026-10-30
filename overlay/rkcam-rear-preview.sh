@@ -4,9 +4,9 @@ set -euo pipefail
 REAR_SETUP="${REAR_SETUP:-/usr/local/bin/setup_isp_rear.sh}"
 FRONT_SETUP="${FRONT_SETUP:-/usr/local/bin/camera-isp-setup.sh}"
 DEVICE="${REAR_PREVIEW_DEVICE:-/dev/video22}"
-# Default to stable rear mode. Wider modes can currently blow out on this BSP.
-W="${REAR_PREVIEW_W:-1920}"
-H="${REAR_PREVIEW_H:-1080}"
+# The whole sensor, 2x2 binned (1920x1080 is a zoomed center crop).
+W="${REAR_PREVIEW_W:-1632}"
+H="${REAR_PREVIEW_H:-1224}"
 FPS="${REAR_PREVIEW_FPS:-15}"
 SETUP_W="${REAR_SETUP_W:-$W}"
 SETUP_H="${REAR_SETUP_H:-$H}"

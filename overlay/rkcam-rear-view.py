@@ -22,7 +22,7 @@ import rkcam_awb  # noqa: E402
 
 AWB_FEEDER = "/usr/local/bin/rkisp1-awb"
 GAINS_FILE = os.path.expanduser("~/.cache/rkcam-webcam/awb-gains-rear")
-DEFAULT_GAINS = (400, 256, 256, 400)
+DEFAULT_GAINS = (236, 256, 256, 389)  # converged under room light
 
 
 def log(msg):
