@@ -56,7 +56,7 @@ The resulting image is written to an SD card. Insert it and power on — the tab
 | **Power button behavior** | ✅ Full (short press sleeps on release, long press >=3s opens shutdown dialog) |
 | **Lockscreen orientation memory** | ✅ Full (lock screen keeps last tablet orientation, including landscape) |
 | **Lockscreen unlock keyboard** | ✅ Full (PIN numberpad removed, virtual keyboard forced for typing `chaos`) |
-| **Cameras** | ⚠️ Partial (front `s5k5e8` + rear `s5k4h5yb` pipelines functional; color tuning still needs calibration) |
+| **Cameras** | ⚠️ Partial (front `s5k5e8` as an on-demand PipeWire webcam; rear `s5k4h5yb` full-view preview with autofocus; both with automatic white balance and exposure, no full ISP tuning) |
 | **Battery / Charging** | ✅ Full (RK817 PMIC) |
 | **SD card boot** | ✅ Full |
 | **USB OTG** | ✅ Full |
@@ -143,7 +143,8 @@ Result: `Qwen3-0.6B` is significantly faster on this RK3562 tablet for local NPU
 
 - Battery fuel gauge recalibration: On cold boot after being powered off for hours, the PMIC fuel gauge is recalibrated directly from the power-on voltage (`pwron_voltage`) in the kernel driver (`rk817-boot-ocv-calibration.patch`), preventing false 0% reports and emergency shutdowns.
 - `rk-battery-gauge-fix.service` remains present as a fallback for userspace recovery.
-- Front (`s5k5e8`) and rear (`s5k4h5yb`) camera preview/capture are functional, but colors are still slightly off and require additional ISP calibration.
+- Cameras have no Rockchip 3A daemon (rkaiq) or ISP tuning: `rkcam_3a.py` provides a gray-world white balance, auto exposure and (rear) contrast autofocus, so pictures are noisier than on Android, especially in low light.
+- The front camera is offered to apps through PipeWire (`rkcam-webcam`, started only while an app uses it); the rear camera is only available in the Rear Camera Preview app.
 
 ---
 
