@@ -233,6 +233,7 @@ apt-get install -y sudo curl wget nano vim openssh-server network-manager wpasup
     udev evtest pciutils usbutils \
     xinput libinput-tools \
     python3 python3-gi gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 \
+    gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 gstreamer1.0-pipewire \
     python3-evdev \
     qt6-wayland \
     i2c-tools \
@@ -2361,24 +2362,15 @@ chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
     /home/${RKDEBIAN_USER}/Desktop || true
 
 # Expose the RKISP front camera as a PipeWire Video/Source for browser apps.
-# The kernel camera nodes are multiplanar V4L2 devices; this bridge publishes a
-# webcam-style source named "Front_Camera" in the user PipeWire graph.
-echo "[*] Installing PipeWire webcam bridge for front camera..."
+# The kernel camera nodes are multiplanar V4L2 devices that PipeWire cannot
+# open, so a GStreamer bridge publishes a webcam-style source named
+# "Front_Camera". The camera (and the rkisp1-awb gain feeder) only run while a
+# client is linked to it; an always-on camera costs ~100 mA at idle.
+echo "[*] Installing on-demand PipeWire webcam bridge for front camera..."
 mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin"
-cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh" << 'RKCAM_WEBCAM'
-#!/bin/sh
-set -eu
-
-# Keep pipeline simple/stable under Chromium capture.
-# io-mode=0 avoids DMABUF path; queue prevents stalls under load.
-exec gst-launch-1.0 --no-fault -q \
-  v4l2src device=/dev/video23 io-mode=0 do-timestamp=true ! \
-  video/x-raw,format=UYVY,width=1280,height=720,framerate=30/1 ! \
-  queue max-size-buffers=4 leaky=downstream ! \
-  pipewiresink mode=provide sync=false \
-    stream-properties="props,media.class=Video/Source,media.role=Camera,node.name=rkcam-webcam,node.description=Front_Camera,node.nick=Front_Camera"
-RKCAM_WEBCAM
-chmod +x "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh"
+rm -f "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh"
+install -m 0755 "${ROOT_DIR}/overlay/rkcam-webcam.py" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.py"
 
 mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants"
 cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service" << 'RKCAM_WEBCAM_UNIT'
@@ -2389,7 +2381,7 @@ Wants=pipewire.service wireplumber.service
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/rkcam-webcam.sh
+ExecStart=%h/.local/bin/rkcam-webcam.py
 # Refresh portal camera inventory after source appears (works around race)
 ExecStartPost=/bin/sh -c 'sleep 1; systemctl --user restart xdg-desktop-portal.service xdg-desktop-portal-gnome.service || true'
 Restart=always
@@ -2402,7 +2394,7 @@ ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
     "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rkcam-webcam.service"
 
 chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
-    /home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh \
+    /home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.py \
     /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
     /home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rkcam-webcam.service || true
 
@@ -4420,8 +4412,9 @@ if [ -n "${RK_CC_ADDED_PKGS// /}" ]; then
         echo "[!] Warning: could not remove temporary toolchain packages."
 fi
 
-# Install rkisp1-awb as a user service that runs alongside rkcam-webcam
-mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants"
+# Install rkisp1-awb as a user service; rkcam-webcam starts and stops it
+# together with the camera, so it has no [Install] section.
+rm -rf "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants"
 cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service" << 'RKISP1_AWB_UNIT'
 [Unit]
 Description=RkISP1 AWB gain feeder for front camera (s5k5e8)
@@ -4434,15 +4427,9 @@ ExecStartPre=/bin/sleep 0.5
 ExecStart=/usr/local/bin/rkisp1-awb 512 256 256 640
 Restart=on-failure
 RestartSec=1
-
-[Install]
-WantedBy=rkcam-webcam.service
 RKISP1_AWB_UNIT
-ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service \
-    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants/rkisp1-awb.service"
-chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
-    /home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service \
-    /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service.wants || true
+chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
+    /home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service || true
 
 # 10b. (removed) rk817-hard-poweroff userspace service was removed.
 # The kernel's rk817_battery_shutdown() now saves dsoc/capacity before
