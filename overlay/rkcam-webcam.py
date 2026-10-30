@@ -27,6 +27,7 @@ DEVICE = "/dev/video23"
 NODE = "rkcam-webcam"
 WIDTH, HEIGHT, FPS = 1280, 720, 30
 CAPS = f"video/x-raw,format=UYVY,width={WIDTH},height={HEIGHT},framerate={FPS}/1"
+BLACK_FRAME = bytes([0x80, 0x10]) * (WIDTH * HEIGHT)
 AWB_UNIT = "rkisp1-awb.service"
 STOP_DELAY_S = 3
 RETRY_DELAY_S = 2
@@ -138,7 +139,11 @@ class Bridge:
     # --- PipeWire source -----------------------------------------------
     def output_on(self):
         self.out = Gst.parse_launch(
-            "appsrc name=src is-live=true format=time do-timestamp=true ! "
+            # A bounded, leaky queue: pipewiresink blocks while a linked
+            # client reads slower than 30 fps or pauses, and an unbounded
+            # appsrc queue then grew until the OOM killer stopped the bridge.
+            "appsrc name=src is-live=true format=time do-timestamp=true "
+            "max-buffers=2 leaky-type=downstream ! "
             # enable-last-sample=false: the sink would otherwise keep the last
             # camera frame, whose driver buffer keeps /dev/video23 mapped.
             "pipewiresink mode=provide sync=false enable-last-sample=false "
@@ -152,8 +157,11 @@ class Bridge:
         self.out.get_bus().connect("message::error", self.on_output_error)
         self.out.set_state(Gst.State.PLAYING)
         # One black frame negotiates the format so the source becomes visible.
-        black = Gst.Buffer.new_wrapped(bytes([0x80, 0x10]) * (WIDTH * HEIGHT))
-        self.src.emit("push-buffer", black)
+        self.push_black()
+
+    def push_black(self, count=1):
+        for _ in range(count):
+            self.src.emit("push-buffer", Gst.Buffer.new_wrapped(BLACK_FRAME))
 
     def output_restart(self):
         self.out.get_bus().remove_signal_watch()
@@ -236,6 +244,14 @@ class Bridge:
         self.cam.set_state(Gst.State.NULL)
         self.cam.get_bus().remove_signal_watch()
         self.cam = None
+        # If the last client went away mid-stream, pipewiresink is stuck
+        # waiting for a buffer from it, holding a camera frame (which keeps
+        # /dev/video23 mapped) and unable to serve the next client; a flush
+        # wakes it but leaves the stream unable to start again. Rebuild the
+        # source instead. This happens only once the camera is idle, never
+        # between an app's probe and its real connection.
+        if self.out and not self.wanted:
+            GLib.idle_add(self.output_restart)
 
     def on_sample(self, sink):
         sample = sink.emit("pull-sample")
@@ -279,8 +295,10 @@ class Bridge:
             return
         log(f"pipewire output reset: {err.message}")
         self.wanted = False
-        self.camera_off()
-        GLib.idle_add(self.output_restart)
+        if self.cam:
+            self.camera_off()  # rebuilds the output once the camera is off
+        else:
+            GLib.idle_add(self.output_restart)
 
 
 Gst.init(None)

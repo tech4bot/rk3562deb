@@ -148,10 +148,15 @@ if [ ! -e "${ISP_VIDEO_DEV}" ] && [ "${ISP_VIDEO_DEV}" = "/dev/video22" ] && [ -
 fi
 log "Capture node: ${ISP_VIDEO_DEV}"
 
-echo "=== Step 1: Stop ISP-related user services ==="
-systemctl --user stop rkisp1-awb.service 2>/dev/null && log "Stopped rkisp1-awb.service" || true
-systemctl --user stop rkcam-webcam.service 2>/dev/null && log "Stopped rkcam-webcam.service" || true
-sleep 0.3
+echo "=== Step 1: Free the ISP from the front camera ==="
+# The front bridge only opens the camera while an app uses it; stop it only
+# then (the app loses the front camera). Restarting it otherwise would give
+# its PipeWire source a new id that open apps no longer find.
+if fuser -s /dev/video23 2>/dev/null; then
+    systemctl --user stop rkisp1-awb.service rkcam-webcam.service 2>/dev/null &&
+        log "Stopped front camera bridge (front camera was in use)" || true
+    sleep 0.3
+fi
 
 echo ""
 echo "=== Step 2: Switch ISP input from front -> rear ==="
@@ -225,18 +230,8 @@ else
     log "WARN: focus subdev missing (${FOCUS_SUBDEV}); skipping lens focus"
 fi
 
-if [ "${REAR_ISP_LINKED}" = "1" ]; then
-    echo ""
-    echo "=== Step 6: Start AWB/CPROC feeder ==="
-    if systemctl --user start rkisp1-awb.service 2>/dev/null; then
-        log "rkisp1-awb.service started"
-    else
-        log "WARN: rkisp1-awb.service failed; starting manual feeder"
-        /usr/local/bin/rkisp1-awb 512 256 256 640 >/tmp/rkisp1-awb-rear.log 2>&1 &
-        log "rkisp1-awb PID $! (log: /tmp/rkisp1-awb-rear.log)"
-    fi
-    sleep 0.7
-fi
+# No AWB feeder for the rear camera: rkisp1-awb carries the front camera's
+# white balance (and, being bound to the front bridge, would restart it).
 
 echo ""
 if [ "${REAR_ISP_LINKED}" = "1" ]; then

@@ -10,6 +10,7 @@
  * on the params node; the mainline struct rkisp1_params_cfg used previously is
  * accepted but its fields land at the wrong offsets, so the gains were ignored.
  */
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,8 +79,13 @@ int main(int argc, char *argv[]) {
     if (argc >= 6) gains_file = argv[5];
     reload_gains(gains_file, &gains_mtime, &r, &gr, &gb, &b);
 
-    signal(SIGTERM, sig_handler);
-    signal(SIGINT,  sig_handler);
+    /* No SA_RESTART: a stop signal must interrupt a blocking DQBUF, which
+     * otherwise waits forever once the ISP stops (e.g. switched to the rear
+     * camera) and the service only dies at systemd's stop timeout. */
+    struct sigaction sa = {0};
+    sa.sa_handler = sig_handler;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
 
     int fd = open(PARAMS_DEV, O_RDWR);
     if (fd < 0) { perror("open"); return 1; }
@@ -130,6 +136,8 @@ int main(int argc, char *argv[]) {
         struct v4l2_buffer buf = {0};
         buf.type = V4L2_BUF_TYPE_META_OUTPUT; buf.memory = V4L2_MEMORY_MMAP;
         if (ioctl(fd, VIDIOC_DQBUF, &buf) < 0) {
+            if (errno == EINTR)
+                continue;
             if (running) perror("DQBUF");
             break;
         }

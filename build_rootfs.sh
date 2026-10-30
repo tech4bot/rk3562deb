@@ -4392,6 +4392,7 @@ ExecStartPre=/bin/sleep 0.5
 ExecStart=/usr/local/bin/rkisp1-awb 512 256 256 640 %h/.cache/rkcam-webcam/awb-gains
 Restart=on-failure
 RestartSec=1
+TimeoutStopSec=5
 RKISP1_AWB_UNIT
 chroot "${ROOTFS_MNT}" chown "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
     /home/${RKDEBIAN_USER}/.config/systemd/user/rkisp1-awb.service || true
