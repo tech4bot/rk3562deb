@@ -655,6 +655,23 @@ build_kernel() {
         fi
     fi
 
+    # RK817 charge limit:
+    # standard charge_control_{start,end}_threshold on the battery supply
+    # (used by upower / GNOME "preserve battery health"). Applies on top of
+    # the boot OCV calibration patch above.
+    local rk817_charge_limit_patch="${ROOT_DIR}/overlay/kernel-patches/rk817-battery-charge-limit.patch"
+    if [ -f "${rk817_charge_limit_patch}" ]; then
+        if grep -q "rk817_bat_charge_limit" drivers/power/supply/rk817_battery.c; then
+            echo "[*] RK817 charge limit already present."
+        else
+            echo "[*] Applying RK817 charge limit..."
+            if ! git apply --whitespace=nowarn "${rk817_charge_limit_patch}"; then
+                echo "[-] Error: failed to apply RK817 charge limit."
+                exit 1
+            fi
+        fi
+    fi
+
     # RK817 charger VBUS presence safety fix:
     # prevent enabling OTG 5V boost when external VBUS is already present,
     # avoiding reverse-current / overvoltage shutdown reboot when connecting charger.
