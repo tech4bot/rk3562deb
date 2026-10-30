@@ -2384,8 +2384,10 @@ Wants=pipewire.service wireplumber.service
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/rkcam-webcam.py
-# Refresh portal camera inventory after source appears (works around race)
-ExecStartPost=/bin/sh -c 'sleep 1; systemctl --user restart xdg-desktop-portal.service xdg-desktop-portal-gnome.service || true'
+# Refresh portal camera inventory after source appears (works around race).
+# --no-block: the portal can take up to its start timeout, and a blocking
+# restart here then times out and restarts the bridge itself.
+ExecStartPost=-/bin/sh -c 'sleep 1; systemctl --user --no-block restart xdg-desktop-portal.service xdg-desktop-portal-gnome.service'
 Restart=always
 RestartSec=2
 
