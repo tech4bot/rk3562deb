@@ -254,6 +254,7 @@ These variables can be set before running `build.sh` to control build behaviour:
 | `RKDEBIAN_WIFI_DIR` | `local/wifi` | Directory of NetworkManager `*.nmconnection` keyfiles to preinstall. `local/` is git-ignored, so Wi-Fi passwords stay out of the repo. |
 | `RKDEBIAN_HOSTNAME` | `rk3562-debian` | Hostname of the image. |
 | `RKDEBIAN_SSH_KEYS` | `local/ssh/authorized_keys` | If the file exists, it is installed as `~/.ssh/authorized_keys` for the default user. |
+| `RKDEBIAN_SPLASH` | `local/splash.png`, else `splash.png` | Boot splash image (1280x720 PNG). |
 
 ### Kernel
 

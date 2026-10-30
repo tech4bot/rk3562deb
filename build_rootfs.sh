@@ -963,17 +963,23 @@ THEME_DIR="${ROOTFS_MNT}/usr/share/plymouth/themes/rkdebian"
 mkdir -p "${THEME_DIR}"
 rm -f "${THEME_DIR}/dot.png"
 
-# splash.png - custom boot logo from repository root.
-if [ ! -f "${ROOT_DIR}/splash.png" ]; then
-    echo "[-] Error: missing ${ROOT_DIR}/splash.png (required for Plymouth logo)."
+# Boot logo: RKDEBIAN_SPLASH, else the git-ignored local/splash.png, else
+# splash.png from the repository root.
+if [ -z "${RKDEBIAN_SPLASH:-}" ]; then
+    RKDEBIAN_SPLASH="${ROOT_DIR}/splash.png"
+    [ -f "${ROOT_DIR}/local/splash.png" ] && RKDEBIAN_SPLASH="${ROOT_DIR}/local/splash.png"
+fi
+if [ ! -f "${RKDEBIAN_SPLASH}" ]; then
+    echo "[-] Error: missing ${RKDEBIAN_SPLASH} (required for Plymouth logo)."
     exit 1
 fi
-install -m 0644 "${ROOT_DIR}/splash.png" "${THEME_DIR}/splash.png"
+echo "[*] Boot splash: ${RKDEBIAN_SPLASH}"
+install -m 0644 "${RKDEBIAN_SPLASH}" "${THEME_DIR}/splash.png"
 # Generate pre-rotated portrait variant for portrait display modes (avoids runtime script rotation crash)
-python3 -c "from PIL import Image; im = Image.open('${ROOT_DIR}/splash.png'); im.transpose(Image.ROTATE_270).save('${THEME_DIR}/splash-portrait.png')" 2>/dev/null || \
+python3 -c "from PIL import Image; im = Image.open('${RKDEBIAN_SPLASH}'); im.transpose(Image.ROTATE_270).save('${THEME_DIR}/splash-portrait.png')" 2>/dev/null || \
     cp -f "${THEME_DIR}/splash.png" "${THEME_DIR}/splash-portrait.png"
 mkdir -p "${ROOTFS_MNT}/usr/share/backgrounds/rkdebian"
-install -m 0644 "${ROOT_DIR}/splash.png" \
+install -m 0644 "${RKDEBIAN_SPLASH}" \
     "${ROOTFS_MNT}/usr/share/backgrounds/rkdebian/splash.png"
 
 # Theme descriptor.
