@@ -1336,6 +1336,37 @@ if [ -s "${RKDEBIAN_SSH_KEYS}" ]; then
         "/home/${RKDEBIAN_USER}/.ssh"
 fi
 
+# 8d. Optional kernel log over UDP (netconsole) to HOST:PORT, for debugging
+# freezes that leave nothing on the SD card. Off unless RKDEBIAN_NETCONSOLE
+# is set; the journal is forwarded to the kernel log as well.
+if [ -n "${RKDEBIAN_NETCONSOLE:-}" ]; then
+    nc_host="${RKDEBIAN_NETCONSOLE%:*}"
+    nc_port="${RKDEBIAN_NETCONSOLE##*:}"
+    [ "${nc_port}" != "${RKDEBIAN_NETCONSOLE}" ] || nc_port=6666
+    echo "[*] Enabling netconsole to ${nc_host}:${nc_port}..."
+    install -m 0755 "${ROOT_DIR}/tools/netconsole-debug.sh" \
+        "${ROOTFS_MNT}/usr/local/bin/netconsole-debug.sh"
+    cat > "${ROOTFS_MNT}/etc/systemd/system/netconsole-debug.service" << NETCONSOLE_UNIT
+[Unit]
+Description=Stream kernel log to ${nc_host}:${nc_port} (freeze debugging)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/netconsole-debug.sh ${nc_host} ${nc_port}
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+NETCONSOLE_UNIT
+    ln -sf /etc/systemd/system/netconsole-debug.service \
+        "${ROOTFS_MNT}/etc/systemd/system/multi-user.target.wants/netconsole-debug.service"
+    mkdir -p "${ROOTFS_MNT}/etc/systemd/journald.conf.d"
+    printf '[Journal]\nForwardToKMsg=yes\nMaxLevelKMsg=info\n' \
+        > "${ROOTFS_MNT}/etc/systemd/journald.conf.d/90-netconsole-debug.conf"
+fi
+
 # 9. Configure display manager autologin
 echo "[*] Configuring display manager autologin (${RKDEBIAN_UI_SESSION})..."
 rm -rf "${ROOTFS_MNT}/etc/sddm.conf.d"

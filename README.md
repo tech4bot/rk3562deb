@@ -255,6 +255,7 @@ These variables can be set before running `build.sh` to control build behaviour:
 | `RKDEBIAN_HOSTNAME` | `rk3562-debian` | Hostname of the image. |
 | `RKDEBIAN_SSH_KEYS` | `local/ssh/authorized_keys` | If the file exists, it is installed as `~/.ssh/authorized_keys` for the default user. |
 | `RKDEBIAN_SPLASH` | `local/splash.png`, else `splash.png` | Boot splash image (1280x720 PNG). |
+| `RKDEBIAN_NETCONSOLE` | (off) | `host[:port]`: stream the kernel log and journal over UDP to that machine (`tools/netconsole-debug.sh`), for debugging freezes. |
 
 ### Kernel
 
