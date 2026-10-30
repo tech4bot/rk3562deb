@@ -4,9 +4,9 @@ set -euo pipefail
 REAR_SETUP="${REAR_SETUP:-/usr/local/bin/setup_isp_rear.sh}"
 FRONT_SETUP="${FRONT_SETUP:-/usr/local/bin/camera-isp-setup.sh}"
 DEVICE="${REAR_PREVIEW_DEVICE:-/dev/video22}"
-# Default to stable rear mode. Wider modes can currently blow out on this BSP.
-W="${REAR_PREVIEW_W:-1920}"
-H="${REAR_PREVIEW_H:-1080}"
+# The whole sensor, 2x2 binned (1920x1080 is a zoomed center crop).
+W="${REAR_PREVIEW_W:-1632}"
+H="${REAR_PREVIEW_H:-1224}"
 FPS="${REAR_PREVIEW_FPS:-15}"
 SETUP_W="${REAR_SETUP_W:-$W}"
 SETUP_H="${REAR_SETUP_H:-$H}"
@@ -96,14 +96,13 @@ if ! command -v gst-launch-1.0 >/dev/null 2>&1; then
     exit 1
 fi
 
+VIEWER="${REAR_VIEWER:-$(dirname "$(readlink -f "$0")")/rkcam-rear-view.py}"
+
 run_gst() {
     local sink="$1"
     log "backend=gstreamer sink=${sink}"
-    gst-launch-1.0 --no-fault -q \
-      v4l2src device="${DEVICE}" io-mode=0 do-timestamp=true ! \
-      video/x-raw,format=NV12,width=${W},height=${H},framerate=${FPS}/1 ! \
-      queue max-size-buffers=4 leaky=downstream ! \
-      videoconvert ! "${sink}" sync=false
+    # The viewer also runs the rear camera's automatic white balance.
+    python3 "${VIEWER}" "${DEVICE}" "${W}" "${H}" "${FPS}" "${sink}"
 }
 
 log "Opening rear camera preview from ${DEVICE} (${W}x${H}@${FPS}fps)"

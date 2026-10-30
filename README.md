@@ -56,7 +56,7 @@ The resulting image is written to an SD card. Insert it and power on — the tab
 | **Power button behavior** | ✅ Full (short press sleeps on release, long press >=3s opens shutdown dialog) |
 | **Lockscreen orientation memory** | ✅ Full (lock screen keeps last tablet orientation, including landscape) |
 | **Lockscreen unlock keyboard** | ✅ Full (PIN numberpad removed, virtual keyboard forced for typing `chaos`) |
-| **Cameras** | ⚠️ Partial (front `s5k5e8` + rear `s5k4h5yb` pipelines functional; color tuning still needs calibration) |
+| **Cameras** | ⚠️ Partial (front `s5k5e8` as an on-demand PipeWire webcam; rear `s5k4h5yb` full-view preview with autofocus; both with automatic white balance and exposure, no full ISP tuning) |
 | **Battery / Charging** | ✅ Full (RK817 PMIC) |
 | **SD card boot** | ✅ Full |
 | **USB OTG** | ✅ Full |
@@ -143,7 +143,8 @@ Result: `Qwen3-0.6B` is significantly faster on this RK3562 tablet for local NPU
 
 - Battery fuel gauge recalibration: On cold boot after being powered off for hours, the PMIC fuel gauge is recalibrated directly from the power-on voltage (`pwron_voltage`) in the kernel driver (`rk817-boot-ocv-calibration.patch`), preventing false 0% reports and emergency shutdowns.
 - `rk-battery-gauge-fix.service` remains present as a fallback for userspace recovery.
-- Front (`s5k5e8`) and rear (`s5k4h5yb`) camera preview/capture are functional, but colors are still slightly off and require additional ISP calibration.
+- Cameras have no Rockchip 3A daemon (rkaiq) or ISP tuning: `rkcam_3a.py` provides a gray-world white balance, auto exposure and (rear) contrast autofocus, so pictures are noisier than on Android, especially in low light.
+- The front camera is offered to apps through PipeWire (`rkcam-webcam`, started only while an app uses it); the rear camera is only available in the Rear Camera Preview app.
 
 ---
 
@@ -250,6 +251,12 @@ These variables can be set before running `build.sh` to control build behaviour:
 | `RKDEBIAN_MALI_GBM_PROVIDER` | `vendor` | Mali-only option: `vendor` keeps `mali/libgbm.so.1` from the blob package (default), `debian` overrides it to Debian `libgbm.so.1` for compatibility testing. |
 | `RKDEBIAN_PREINSTALL_FREETUBE` | `0` | Set to `1` to preinstall FreeTube Flatpak (adds ~300 MB to rootfs). Default is `0`. |
 | `RKDEBIAN_MINIMIZE_IMAGE` | `0` | Set to `1` for aggressive size reduction (prunes non-English locales plus `/usr/share/doc`, `/usr/share/help`, `/usr/share/man`, `/usr/share/info`, and unused Flatpak objects). |
+| `RKDEBIAN_USER` | `chaos` | Name of the default login user (its password is the same as the name). |
+| `RKDEBIAN_WIFI_DIR` | `local/wifi` | Directory of NetworkManager `*.nmconnection` keyfiles to preinstall. `local/` is git-ignored, so Wi-Fi passwords stay out of the repo. |
+| `RKDEBIAN_HOSTNAME` | `rk3562-debian` | Hostname of the image. |
+| `RKDEBIAN_SSH_KEYS` | `local/ssh/authorized_keys` | If the file exists, it is installed as `~/.ssh/authorized_keys` for the default user. |
+| `RKDEBIAN_SPLASH` | `local/splash.png`, else `splash.png` | Boot splash image (1280x720 PNG). |
+| `RKDEBIAN_NETCONSOLE` | (off) | `host[:port]`: stream the kernel log and journal over UDP to that machine (`tools/netconsole-debug.sh`), for debugging freezes. |
 
 ### Kernel
 
@@ -406,6 +413,8 @@ The build system creates the following accounts in the Debian image:
 |---------|----------|----------|-------|
 | Standard user | `chaos` | `chaos` | Passwordless sudo |
 | Root | `root` | `root` | Direct root login |
+
+Set `RKDEBIAN_USER=<name>` at build time to use a different user name. Personal settings can be kept in the git-ignored `local/build.env` (for example `RKDEBIAN_USER=myname` and `RKDEBIAN_HOSTNAME=my-tablet`); both build scripts load it automatically.
 
 ### Lock Screen & Passcode
 

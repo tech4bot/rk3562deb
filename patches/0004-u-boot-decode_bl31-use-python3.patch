@@ -1,0 +1,10 @@
+diff --git a/arch/arm/mach-rockchip/decode_bl31.py b/arch/arm/mach-rockchip/decode_bl31.py
+index 301bd15..c0db739 100755
+--- a/arch/arm/mach-rockchip/decode_bl31.py
++++ b/arch/arm/mach-rockchip/decode_bl31.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python2
++#!/usr/bin/env python3
+ #
+ # Copyright (C) 2020 Rockchip Electronics Co., Ltd
+ #

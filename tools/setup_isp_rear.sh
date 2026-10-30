@@ -2,7 +2,8 @@
 # setup_isp_rear.sh — configure rear camera (s5k4h5yb) through ISP.
 #
 # Route: s5k4h5yb -> DPHY0 -> MIPI CSI2 -> rkcif-mipi-lvds -> rkisp -> /dev/video22
-# Default mode is 1920x1080 (stable on current BSP).
+# Default mode is 1632x1224: the whole sensor, 2x2 binned. 1920x1080 is a
+# center crop (zoomed), and the ISP cannot keep up with full 3264x2448.
 #
 # Key fix:
 #   We must set the rear CIF pad format on the ISP media graph
@@ -13,7 +14,7 @@
 #   bash setup_isp_rear.sh
 #
 # Optional env:
-#   REAR_W=1920 REAR_H=1080
+#   REAR_W=1632 REAR_H=1224
 #   ISP_VIDEO_DEV=/dev/video22
 #   REAR_SENSOR_SUBDEV=/dev/v4l-subdev2
 #   REAR_FOCUS_SUBDEV=/dev/v4l-subdev3
@@ -21,8 +22,8 @@
 #   REAR_SENSOR_ENTITY="m00_b_s5k4h5yb 4-0036"
 set -euo pipefail
 
-W="${REAR_W:-1920}"
-H="${REAR_H:-1080}"
+W="${REAR_W:-1632}"
+H="${REAR_H:-1224}"
 ISP_VIDEO_DEV="${ISP_VIDEO_DEV:-/dev/video22}"
 ISP_SUBDEV="${ISP_SUBDEV:-/dev/v4l-subdev7}"
 SENSOR_SUBDEV="${REAR_SENSOR_SUBDEV:-/dev/v4l-subdev2}"
@@ -148,10 +149,15 @@ if [ ! -e "${ISP_VIDEO_DEV}" ] && [ "${ISP_VIDEO_DEV}" = "/dev/video22" ] && [ -
 fi
 log "Capture node: ${ISP_VIDEO_DEV}"
 
-echo "=== Step 1: Stop ISP-related user services ==="
-systemctl --user stop rkisp1-awb.service 2>/dev/null && log "Stopped rkisp1-awb.service" || true
-systemctl --user stop rkcam-webcam.service 2>/dev/null && log "Stopped rkcam-webcam.service" || true
-sleep 0.3
+echo "=== Step 1: Free the ISP from the front camera ==="
+# The front bridge only opens the camera while an app uses it; stop it only
+# then (the app loses the front camera). Restarting it otherwise would give
+# its PipeWire source a new id that open apps no longer find.
+if fuser -s /dev/video23 2>/dev/null; then
+    systemctl --user stop rkisp1-awb.service rkcam-webcam.service 2>/dev/null &&
+        log "Stopped front camera bridge (front camera was in use)" || true
+    sleep 0.3
+fi
 
 echo ""
 echo "=== Step 2: Switch ISP input from front -> rear ==="
@@ -199,8 +205,9 @@ echo ""
 echo "=== Step 5: Apply rear sensor controls ==="
 if [ -e "${SENSOR_SUBDEV}" ]; then
     REAR_EXPOSURE="${REAR_EXPOSURE:-2448}"
-    # 128 is often too dark on this rear module; use a practical default.
-    REAR_ANALOG_GAIN="${REAR_ANALOG_GAIN:-768}"
+    # Fixed exposure (there is no auto exposure); 256 (8x) suits indoor light
+    # in the binned 1632x1224 mode, 768 blows it out.
+    REAR_ANALOG_GAIN="${REAR_ANALOG_GAIN:-256}"
     v4l2-ctl -d "${SENSOR_SUBDEV}" -c test_pattern=0 >/dev/null 2>&1 || true
     v4l2-ctl -d "${SENSOR_SUBDEV}" -c exposure="${REAR_EXPOSURE}" >/dev/null 2>&1 || true
     v4l2-ctl -d "${SENSOR_SUBDEV}" -c analogue_gain="${REAR_ANALOG_GAIN}" >/dev/null 2>&1 || true
@@ -210,10 +217,21 @@ else
 fi
 
 # Optional manual lens focus (VCM). Rear module exposes focus_absolute on fp5510.
+# Note: the fp5510 driver powers the coil only while its node is open, so this
+# position lasts only until v4l2-ctl exits; rkcam-rear-view.py keeps the node
+# open and runs autofocus.
 if [ -e "${FOCUS_SUBDEV}" ]; then
     REAR_FOCUS="${REAR_FOCUS:-64}"
-    if v4l2-ctl -d "${FOCUS_SUBDEV}" --get-ctrl=focus_absolute >/dev/null 2>&1; then
-        if v4l2-ctl -d "${FOCUS_SUBDEV}" -c focus_absolute="${REAR_FOCUS}" >/dev/null 2>&1; then
+    # v4l2-ctl exits non-zero (and prints an error on stdout) on these subdevs
+    # even when the control works: the vendor kernel lacks
+    # VIDIOC_SUBDEV_S_CLIENT_CAP. Check the value instead.
+    get_focus() {
+        v4l2-ctl -d "${FOCUS_SUBDEV}" --get-ctrl=focus_absolute 2>/dev/null |
+            sed -n 's/^focus_absolute: //p' || true
+    }
+    if [ -n "$(get_focus)" ]; then
+        v4l2-ctl -d "${FOCUS_SUBDEV}" -c focus_absolute="${REAR_FOCUS}" >/dev/null 2>&1 || true
+        if [ "$(get_focus)" = "${REAR_FOCUS}" ]; then
             log "Lens focus applied: focus_absolute=${REAR_FOCUS}"
         else
             log "WARN: failed to apply focus_absolute=${REAR_FOCUS} on ${FOCUS_SUBDEV}"
@@ -225,18 +243,8 @@ else
     log "WARN: focus subdev missing (${FOCUS_SUBDEV}); skipping lens focus"
 fi
 
-if [ "${REAR_ISP_LINKED}" = "1" ]; then
-    echo ""
-    echo "=== Step 6: Start AWB/CPROC feeder ==="
-    if systemctl --user start rkisp1-awb.service 2>/dev/null; then
-        log "rkisp1-awb.service started"
-    else
-        log "WARN: rkisp1-awb.service failed; starting manual feeder"
-        /usr/local/bin/rkisp1-awb 512 256 256 640 >/tmp/rkisp1-awb-rear.log 2>&1 &
-        log "rkisp1-awb PID $! (log: /tmp/rkisp1-awb-rear.log)"
-    fi
-    sleep 0.7
-fi
+# No AWB feeder for the rear camera: rkisp1-awb carries the front camera's
+# white balance (and, being bound to the front bridge, would restart it).
 
 echo ""
 if [ "${REAR_ISP_LINKED}" = "1" ]; then

@@ -6,6 +6,15 @@ export PATH="/usr/sbin:/sbin:$PATH"
 # RK3562 Debian 13 Builder
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Per-builder settings (user name, hostname, ...) from the git-ignored
+# local/build.env, e.g. RKDEBIAN_USER=myname. Variables set there override the
+# environment.
+if [ -f "${ROOT_DIR}/local/build.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "${ROOT_DIR}/local/build.env"
+    set +a
+fi
 SRC_DIR="${ROOT_DIR}/src"
 OUT_DIR="${ROOT_DIR}/out"
 OUTPUT_DIR="${ROOT_DIR}/output"
@@ -384,7 +393,7 @@ sanitize_kbuild_cmd_files() {
 }
 
 run_build_rootfs() {
-    local preserve_env="RKDEBIAN_FORCE_CLEAN_ROOTFS,ROOTFS_IMAGE_SIZE,ROOTFS_HEADROOM_MB,ROOTFS_MIN_MB,RKDEBIAN_DISPLAY_SERVER,RKDEBIAN_GPU_STACK,RKDEBIAN_UI_SESSION,RKDEBIAN_CPU_GOVERNOR,RKDEBIAN_PREINSTALL_FREETUBE,RKDEBIAN_MINIMIZE_IMAGE"
+    local preserve_env="RKDEBIAN_FORCE_CLEAN_ROOTFS,ROOTFS_IMAGE_SIZE,ROOTFS_HEADROOM_MB,ROOTFS_MIN_MB,RKDEBIAN_DISPLAY_SERVER,RKDEBIAN_GPU_STACK,RKDEBIAN_UI_SESSION,RKDEBIAN_CPU_GOVERNOR,RKDEBIAN_PREINSTALL_FREETUBE,RKDEBIAN_MINIMIZE_IMAGE,RKDEBIAN_USER,RKDEBIAN_WIFI_DIR,RKDEBIAN_HOSTNAME,RKDEBIAN_SSH_KEYS,RKDEBIAN_SPLASH,RKDEBIAN_NETCONSOLE"
     if [ "${EUID}" -eq 0 ]; then
         bash "${ROOT_DIR}/build_rootfs.sh"
     else
@@ -393,24 +402,32 @@ run_build_rootfs() {
 }
 
 apply_local_uboot_patches() {
-    local patch_file="${ROOT_DIR}/patches/0001-u-boot-make.sh-only-require-python2-for-legacy-generators.patch"
+    local patch_file
+    local patches=(
+        "${ROOT_DIR}/patches/0001-u-boot-make.sh-only-require-python2-for-legacy-generators.patch"
+        # fit_nodes.sh runs decode_bl31.py directly; without python2 on the
+        # host the ATF image is silently left out of u-boot.itb.
+        "${ROOT_DIR}/patches/0004-u-boot-decode_bl31-use-python3.patch"
+    )
 
-    if [ ! -f "${patch_file}" ]; then
-        return 0
-    fi
+    for patch_file in "${patches[@]}"; do
+        if [ ! -f "${patch_file}" ]; then
+            continue
+        fi
 
-    echo "[*] Checking local U-Boot patch: $(basename "${patch_file}")"
-    if git apply --check "${patch_file}" >/dev/null 2>&1; then
-        git apply "${patch_file}"
-        echo "[+] Applied local U-Boot patch."
-    elif git apply -R --check "${patch_file}" >/dev/null 2>&1; then
-        echo "[*] Local U-Boot patch already applied."
-    else
-        echo "[-] Error: unable to apply local U-Boot patch."
-        echo "    Patch: ${patch_file}"
-        echo "    Hint: ensure u-boot/make.sh matches expected base or apply manually."
-        exit 1
-    fi
+        echo "[*] Checking local U-Boot patch: $(basename "${patch_file}")"
+        if git apply --check "${patch_file}" >/dev/null 2>&1; then
+            git apply "${patch_file}"
+            echo "[+] Applied local U-Boot patch."
+        elif git apply -R --check "${patch_file}" >/dev/null 2>&1; then
+            echo "[*] Local U-Boot patch already applied."
+        else
+            echo "[-] Error: unable to apply local U-Boot patch."
+            echo "    Patch: ${patch_file}"
+            echo "    Hint: ensure the u-boot tree matches the expected base or apply manually."
+            exit 1
+        fi
+    done
 }
 
 build_uboot() {
@@ -522,6 +539,12 @@ build_uboot() {
     else
         echo "[+] Using loader artifact: ${spl_loader}"
         cp "${spl_loader}" "${OUT_DIR}/idbloader.img"
+    fi
+    # make.sh reports success even when bl31 extraction fails, leaving a FIT
+    # whose config references a missing atf-1 image (unbootable).
+    if ! tools/mkimage -l uboot.img | grep -q "ARM Trusted Firmware"; then
+        echo "[-] Error: uboot.img has no ARM Trusted Firmware image (bl31 extraction failed)."
+        exit 1
     fi
     cp uboot.img "${OUT_DIR}/u-boot.itb"
     
@@ -641,6 +664,23 @@ build_kernel() {
         fi
     fi
 
+    # RK817 charge limit:
+    # standard charge_control_{start,end}_threshold on the battery supply
+    # (used by upower / GNOME "preserve battery health"). Applies on top of
+    # the boot OCV calibration patch above.
+    local rk817_charge_limit_patch="${ROOT_DIR}/overlay/kernel-patches/rk817-battery-charge-limit.patch"
+    if [ -f "${rk817_charge_limit_patch}" ]; then
+        if grep -q "rk817_bat_charge_limit" drivers/power/supply/rk817_battery.c; then
+            echo "[*] RK817 charge limit already present."
+        else
+            echo "[*] Applying RK817 charge limit..."
+            if ! git apply --whitespace=nowarn "${rk817_charge_limit_patch}"; then
+                echo "[-] Error: failed to apply RK817 charge limit."
+                exit 1
+            fi
+        fi
+    fi
+
     # RK817 charger VBUS presence safety fix:
     # prevent enabling OTG 5V boost when external VBUS is already present,
     # avoiding reverse-current / overvoltage shutdown reboot when connecting charger.
@@ -737,6 +777,14 @@ build_kernel() {
         scripts/config --enable SND_SOC_ROCKCHIP_MULTI_DAIS || true
         scripts/config --enable SND_SOC_ROCKCHIP_PDM_V2 || true
         scripts/config --enable SND_SOC_ROCKCHIP_TRCM || true
+        # Debugging aids for freezes that leave nothing on the SD card: kernel
+        # log over UDP (netconsole, configured at runtime through configfs)
+        # and warnings for tasks or CPUs stuck for too long.
+        scripts/config --module NETCONSOLE || true
+        scripts/config --enable NETCONSOLE_DYNAMIC || true
+        scripts/config --enable SOFTLOCKUP_DETECTOR || true
+        scripts/config --enable DETECT_HUNG_TASK || true
+        scripts/config --set-val DEFAULT_HUNG_TASK_TIMEOUT 60 || true
         # Avoid black screen before userspace by enabling early fb console/logo.
         scripts/config --enable FRAMEBUFFER_CONSOLE || true
         scripts/config --enable LOGO || true
@@ -796,6 +844,16 @@ build_kernel() {
         scripts/config --set-str EXTRA_FIRMWARE_DIR "firmware" || true
 
         RKDEBIAN_ALLOW_WARNINGS=1 make ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE} olddefconfig
+    fi
+
+    # The kernel 6.1 host tool certs/extract-cert.c includes openssl/engine.h.
+    # Fedora 41+ moved that header out of openssl-devel, so check for it here
+    # instead of failing deep inside the kernel build.
+    if ! echo '#include <openssl/engine.h>' | ${HOSTCC:-gcc} -E -x c - >/dev/null 2>&1; then
+        echo "[-] Error: host header openssl/engine.h is missing (needed by certs/extract-cert)."
+        echo "    Fedora: sudo dnf install openssl-devel-engine"
+        echo "    Debian/Ubuntu: sudo apt-get install libssl-dev"
+        exit 1
     fi
 
     RKDEBIAN_ALLOW_WARNINGS=1 make ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE} WERROR=0 -j${MAKE_THREADS} Image dtbs modules
@@ -1041,8 +1099,8 @@ CHROMIUM_HW_SYNC
         if [ -f "${ROOT_DIR}/overlay/tablet-dock.desktop" ]; then
             ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/usr/share/applications/tablet-dock.desktop"
             ${SUDO_CMD}chmod 0644 "${OUT_DIR}/rootfs/usr/share/applications/tablet-dock.desktop"
-            if [ -d "${OUT_DIR}/rootfs/home/chaos/.local/share/applications" ]; then
-                ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/home/chaos/.local/share/applications/tablet-dock.desktop"
+            if [ -d "${OUT_DIR}/rootfs/home/${RKDEBIAN_USER:-chaos}/.local/share/applications" ]; then
+                ${SUDO_CMD}cp "${ROOT_DIR}/overlay/tablet-dock.desktop" "${OUT_DIR}/rootfs/home/${RKDEBIAN_USER:-chaos}/.local/share/applications/tablet-dock.desktop"
             fi
         fi
     fi

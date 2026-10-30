@@ -1,0 +1,177 @@
+diff --git a/drivers/power/supply/rk817_battery.c b/drivers/power/supply/rk817_battery.c
+index 997fa08..8d53101 100644
+--- a/drivers/power/supply/rk817_battery.c
++++ b/drivers/power/supply/rk817_battery.c
+@@ -527,6 +527,10 @@ struct rk817_battery_device {
+ 	struct power_supply		*chg_psy;
+ 	struct regmap_field		*rmap_fields[F_MAX_FIELDS];
+ 	struct battery_platform_data	*pdata;
++	int				chrg_start_thr;	/* percent, 0 = end - 1 */
++	int				chrg_end_thr;	/* percent, 100 = no limit */
++	bool				chrg_inhibited;
++	int				chrg_lts_saved;	/* BAT_LTS_TS before inhibit */
+ 	struct workqueue_struct		*bat_monitor_wq;
+ 	struct delayed_work		bat_delay_work;
+ 	struct delayed_work		calib_delay_work;
+@@ -2646,6 +2650,8 @@ static enum power_supply_property rk817_bat_props[] = {
+ 	POWER_SUPPLY_PROP_CHARGE_FULL,
+ 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+ 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
++	POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD,
++	POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD,
+ };
+ 
+ static int rk817_get_capacity_leve(struct rk817_battery_device *battery)
+@@ -2725,6 +2731,9 @@ static int rk817_battery_get_property(struct power_supply *psy,
+ 			val->intval = VIRTUAL_STATUS;
+ 		else if (battery->dsoc == MAX_PERCENTAGE)
+ 			val->intval = POWER_SUPPLY_STATUS_FULL;
++		else if (battery->chrg_inhibited &&
++			 power_supply_is_system_supplied())
++			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+ 		else {
+ 			if ((battery->chip_id != RK809_ID) &&
+ 			    power_supply_is_system_supplied())
+@@ -2746,6 +2755,12 @@ static int rk817_battery_get_property(struct power_supply *psy,
+ 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
+ 		val->intval = battery->charge_count;
+ 		break;
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD:
++		val->intval = battery->chrg_start_thr;
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD:
++		val->intval = battery->chrg_end_thr;
++		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+@@ -2753,12 +2768,53 @@ static int rk817_battery_get_property(struct power_supply *psy,
+ 	return 0;
+ }
+ 
++static int rk817_battery_set_property(struct power_supply *psy,
++				      enum power_supply_property psp,
++				      const union power_supply_propval *val)
++{
++	struct rk817_battery_device *battery = power_supply_get_drvdata(psy);
++
++	if (val->intval < 0 || val->intval > 100)
++		return -EINVAL;
++
++	switch (psp) {
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD:
++		battery->chrg_start_thr = val->intval;
++		break;
++	case POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD:
++		battery->chrg_end_thr = val->intval;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	/* Apply the new limit now instead of on the next monitor tick. */
++	mod_delayed_work(battery->bat_monitor_wq, &battery->bat_delay_work, 0);
++
++	return 0;
++}
++
++static int rk817_battery_property_is_writeable(struct power_supply *psy,
++					       enum power_supply_property psp)
++{
++	struct rk817_battery_device *battery = power_supply_get_drvdata(psy);
++
++	/* No charger on RK809; the temperature table owns BAT_LTS_TS. */
++	if (battery->chip_id == RK809_ID || battery->pdata->tc_count)
++		return 0;
++
++	return psp == POWER_SUPPLY_PROP_CHARGE_CONTROL_START_THRESHOLD ||
++	       psp == POWER_SUPPLY_PROP_CHARGE_CONTROL_END_THRESHOLD;
++}
++
+ static const struct power_supply_desc rk817_bat_desc = {
+ 	.name		= "battery",
+ 	.type		= POWER_SUPPLY_TYPE_BATTERY,
+ 	.properties	= rk817_bat_props,
+ 	.num_properties	= ARRAY_SIZE(rk817_bat_props),
+ 	.get_property	= rk817_battery_get_property,
++	.set_property	= rk817_battery_set_property,
++	.property_is_writeable = rk817_battery_property_is_writeable,
+ };
+ 
+ static int rk817_bat_init_power_supply(struct rk817_battery_device *battery)
+@@ -3304,6 +3360,59 @@ static void rk817_bat_output_info(struct rk817_battery_device *battery)
+ 	DBG("info END.\n");
+ }
+ 
++/*
++ * Charge limit (charge_control_{start,end}_threshold): stop charging once
++ * the displayed SOC reaches the end threshold and resume when it falls to
++ * the start threshold (or end - 1 when start is 0 or not below end).
++ *
++ * Charging is paused the same way the vendor temperature control does it,
++ * by moving the battery low-temperature threshold (BAT_LTS_TS) so the
++ * charger reports BAT_TMP_ERR; the system keeps running from the charger.
++ * Restoring the threshold makes the charger resume on its own, whereas
++ * clearing and setting CHRG_EN leaves it stuck in CHRG_OFF until replug.
++ */
++static void rk817_bat_charge_limit(struct rk817_battery_device *battery)
++{
++	int soc = (battery->dsoc + 400) / 1000;
++	int end = battery->chrg_end_thr;
++	int resume = battery->chrg_start_thr;
++	bool was_inhibited = battery->chrg_inhibited;
++
++	if (battery->chip_id == RK809_ID || battery->pdata->tc_count)
++		return;
++
++	if (resume <= 0 || resume >= end)
++		resume = end - 1;
++
++	if (end >= 100)
++		battery->chrg_inhibited = false;
++	else if (soc >= end)
++		battery->chrg_inhibited = true;
++	else if (soc <= resume)
++		battery->chrg_inhibited = false;
++
++	if (battery->chrg_inhibited) {
++		int lts = rk817_bat_field_read(battery, BAT_LTS_TS);
++
++		if (lts > 0) {
++			if (!was_inhibited)
++				battery->chrg_lts_saved = lts;
++			rk817_bat_disable_charge(battery);
++		}
++	} else if (was_inhibited) {
++		if (battery->chrg_lts_saved > 0)
++			rk817_bat_field_write(battery, BAT_LTS_TS,
++					      battery->chrg_lts_saved);
++		else
++			rk817_bat_enable_charge(battery);
++	}
++
++	if (battery->chrg_inhibited != was_inhibited)
++		BAT_INFO("charge limit: soc=%d%% start=%d end=%d -> charging %s\n",
++			 soc, battery->chrg_start_thr, end,
++			 battery->chrg_inhibited ? "inhibited" : "allowed");
++}
++
+ static void rk817_battery_work(struct work_struct *work)
+ {
+ 	struct rk817_battery_device *battery =
+@@ -3315,6 +3424,7 @@ static void rk817_battery_work(struct work_struct *work)
+ 	rk817_bat_wait_finish_sig(battery);
+ 	rk817_bat_lowpwr_check(battery);
+ 	rk817_bat_display_smooth(battery);
++	rk817_bat_charge_limit(battery);
+ 	rk817_bat_update_fcc(battery);
+ 	rk817_bat_power_supply_changed(battery);
+ 	rk817_bat_save_data(battery);
+@@ -3443,6 +3553,7 @@ static int rk817_battery_probe(struct platform_device *pdev)
+ 	battery->dev = &pdev->dev;
+ 	platform_set_drvdata(pdev, battery);
+ 	battery->chip_id = rk817->variant;
++	battery->chrg_end_thr = 100;
+ 
+ 	if (IS_ERR(rk817->regmap)) {
+ 		dev_err(battery->dev, "Failed to initialize regmap\n");

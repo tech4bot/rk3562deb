@@ -39,7 +39,7 @@ run_user_systemctl() {
     if [ "$(id -u)" -ne 0 ]; then
         return 1
     fi
-    user="${CAMERA_USER:-chaos}"
+    user="${CAMERA_USER:-@RKDEBIAN_USER@}"
     uid="$(id -u "${user}" 2>/dev/null || true)"
     if [ -z "${uid}" ] || [ ! -S "/run/user/${uid}/bus" ]; then
         return 1
@@ -67,16 +67,12 @@ run_user_systemctl() {
 stop_user_camera_services() {
     [ "${FRONT_STOP_USER_SERVICES:-1}" = "1" ] || return 0
 
-    local stopped=0
+    # The on-demand bridge only holds the camera while an app streams from
+    # it. Leave an idle bridge alone: a restart gives its PipeWire source a
+    # new id that apps which already listed the camera no longer find.
+    fuser -s /dev/video23 2>/dev/null || return 0
     if run_user_systemctl stop rkcam-webcam.service; then
-        log "stopped user service: rkcam-webcam.service"
-        stopped=1
-    fi
-    if run_user_systemctl stop rkisp1-awb.service; then
-        log "stopped user service: rkisp1-awb.service"
-        stopped=1
-    fi
-    if [ "${stopped}" -eq 1 ]; then
+        log "stopped user service: rkcam-webcam.service (camera was in use)"
         sleep 0.3
     fi
 }
@@ -84,10 +80,7 @@ stop_user_camera_services() {
 start_user_camera_services() {
     [ "${FRONT_RESTART_USER_SERVICES:-1}" = "1" ] || return 0
 
-    # AWB first, then webcam bridge.
-    if run_user_systemctl start rkisp1-awb.service; then
-        log "started user service: rkisp1-awb.service"
-    fi
+    # The bridge starts rkisp1-awb itself while a client uses the camera.
     if run_user_systemctl start rkcam-webcam.service; then
         log "started user service: rkcam-webcam.service"
     fi
