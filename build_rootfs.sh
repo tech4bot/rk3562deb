@@ -2371,8 +2371,8 @@ mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin"
 rm -f "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.sh"
 install -m 0755 "${ROOT_DIR}/overlay/rkcam-webcam.py" \
     "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.py"
-install -m 0644 "${ROOT_DIR}/overlay/rkcam_awb.py" \
-    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam_awb.py"
+install -m 0644 "${ROOT_DIR}/overlay/rkcam_3a.py" \
+    "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.local/bin/rkcam_3a.py"
 
 mkdir -p "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants"
 cat > "${ROOTFS_MNT}/home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service" << 'RKCAM_WEBCAM_UNIT'
@@ -2399,7 +2399,7 @@ ln -sfn /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
 
 chroot "${ROOTFS_MNT}" chown -R "${RKDEBIAN_USER}:${RKDEBIAN_USER}" \
     /home/${RKDEBIAN_USER}/.local/bin/rkcam-webcam.py \
-    /home/${RKDEBIAN_USER}/.local/bin/rkcam_awb.py \
+    /home/${RKDEBIAN_USER}/.local/bin/rkcam_3a.py \
     /home/${RKDEBIAN_USER}/.config/systemd/user/rkcam-webcam.service \
     /home/${RKDEBIAN_USER}/.config/systemd/user/default.target.wants/rkcam-webcam.service || true
 

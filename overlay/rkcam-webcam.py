@@ -11,7 +11,8 @@ While streaming, the bridge also
 - crops the 4:3 sensor image to a centered 16:9 window, so 1280x720 is not
   stretched horizontally, and
 - runs a gray-world auto white balance on the frames it forwards, handing new
-  red/blue gains to rkisp1-awb through a gains file (there is no 3A daemon).
+  red/blue gains to rkisp1-awb through a gains file (there is no 3A daemon),
+  and an auto exposure that sets the sensor's exposure time and gain.
 """
 import json
 import os
@@ -23,10 +24,11 @@ import gi
 gi.require_version("Gst", "1.0")
 from gi.repository import GLib, Gst  # noqa: E402
 
-import rkcam_awb  # noqa: E402
+import rkcam_3a  # noqa: E402
 
 DEVICE = "/dev/video23"
 NODE = "rkcam-webcam"
+SENSOR = "s5k5e8"
 WIDTH, HEIGHT, FPS = 1280, 720, 30
 CAPS = f"video/x-raw,format=UYVY,width={WIDTH},height={HEIGHT},framerate={FPS}/1"
 BLACK_FRAME = bytes([0x80, 0x10]) * (WIDTH * HEIGHT)
@@ -34,7 +36,7 @@ AWB_UNIT = "rkisp1-awb.service"
 STOP_DELAY_S = 3
 RETRY_DELAY_S = 2
 
-# Shared with rkisp1-awb; see rkcam_awb.py.
+# Shared with rkisp1-awb; see rkcam_3a.py.
 GAINS_FILE = os.path.expanduser("~/.cache/rkcam-webcam/awb-gains")
 DEFAULT_GAINS = (512, 256, 256, 640)
 
@@ -73,7 +75,8 @@ class Bridge:
         self.retry_source = 0
         self.decoder = json.JSONDecoder()
         self.pending = ""
-        self.awb = rkcam_awb.WhiteBalance(GAINS_FILE, DEFAULT_GAINS)
+        self.awb = rkcam_3a.WhiteBalance(GAINS_FILE, DEFAULT_GAINS)
+        self.ae = None
         self.frames = 0
 
     def start(self):
@@ -173,6 +176,7 @@ class Bridge:
             return
         log("client connected, starting camera")
         set_crop_16_9(DEVICE)
+        self.ae = rkcam_3a.AutoExposure(SENSOR)
         self.frames = 0
         self.cam = Gst.parse_launch(
             f"v4l2src device={DEVICE} io-mode=0 ! {CAPS} ! "
@@ -192,6 +196,7 @@ class Bridge:
         self.cam.set_state(Gst.State.NULL)
         self.cam.get_bus().remove_signal_watch()
         self.cam = None
+        self.ae.close()
         # If the last client went away mid-stream, pipewiresink is stuck
         # waiting for a buffer from it, holding a camera frame (which keeps
         # /dev/video23 mapped) and unable to serve the next client; a flush
@@ -207,11 +212,13 @@ class Bridge:
             return Gst.FlowReturn.OK
         frame = sample.get_buffer()
         self.frames += 1
-        if self.frames % rkcam_awb.EVERY == 0:
+        if self.frames % rkcam_3a.EVERY == 0:
             ok, info = frame.map(Gst.MapFlags.READ)
             if ok:
                 try:
-                    self.awb.update(rkcam_awb.sample_uyvy(info.data))
+                    samples = rkcam_3a.sample_uyvy(info.data)
+                    self.awb.update(samples)
+                    self.ae.update(samples[0])
                 finally:
                     frame.unmap(info)
         buf = frame.copy()
