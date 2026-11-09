@@ -5,7 +5,7 @@
 ## Download Pre-release Image
 
 > **Current public build (pre-release, May 14, 2026):**
-> - Release page: [tech4bot/rk3562deb prerelease-24052026](https://github.com/tech4bot/rk3562deb/releases/tag/prerelease-24052026)
+> - Release page: [Debian 13 (Trixie) for Doogee U10 Tablet](https://github.com/tech4bot/rk3562deb/releases/tag/release-18102026)
 > - Direct image download: [rk3562-debian.img.xz](https://github.com/tech4bot/rk3562deb/releases/download/prerelease-24052026/rk3562-debian.img.xz)
 > - Video demo: [YouTube](https://youtu.be/DbX13_mahKc?si=Ba9u2xqAmoXM7nYb)
 
