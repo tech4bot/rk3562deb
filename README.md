@@ -4,7 +4,7 @@
 
 ## Download Pre-release Image
 
-> **Current public build (pre-release, May 14, 2026):**
+> **Current public build (release, Oct 18, 2026):**
 > - Release page: [Debian 13 (Trixie) for Doogee U10 Tablet](https://github.com/tech4bot/rk3562deb/releases/tag/release-18102026)
 > - Direct image download: [rk3562-debian.img.xz](https://github.com/tech4bot/rk3562deb/releases/download/release-18102026/rk3562-debian.img.xz)
 > - Video demo: [YouTube](https://youtu.be/DbX13_mahKc?si=Ba9u2xqAmoXM7nYb)
@@ -13,7 +13,7 @@
 > Boot from SD card, remove it to return to stock Android. No changes to internal storage.
 
 > **Reverse engineered from scratch** — no BSP, no vendor documentation, no official support.
-> Built with the help of **Claude**, **Codex**, and **Antigravity** (Google Gemini), using **[Firefly RK3562](https://github.com/Firefly-rk-linux)** open-source repositories as a starting point.
+> Built with the help of **Claude**, **ChatGPT**, and **Google Gemini**, using **[Firefly RK3562](https://github.com/Firefly-rk-linux)** open-source repositories as a starting point.
 
 ---
 
